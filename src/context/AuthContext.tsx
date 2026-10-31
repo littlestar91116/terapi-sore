@@ -27,11 +27,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         return JSON.parse(saved);
       } catch {
-        return SEED_USERS[0];
+        return null;
       }
     }
-    // Default logged in as Admin for testing (username: admin, pass: 12345)
-    return SEED_USERS[0];
+    // Tampilan awal web selalu ke halaman login
+    return null;
   });
 
   const [permissions, setPermissions] = useState<RolePermission[]>(() => {

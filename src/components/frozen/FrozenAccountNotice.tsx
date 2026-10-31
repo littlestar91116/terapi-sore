@@ -121,35 +121,8 @@ export const FrozenAccountNotice: React.FC = () => {
               className="px-5 py-3 border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
             >
               <LogOut className="w-4 h-4 text-slate-500" />
-              Keluar
+              Keluar ke Halaman Login
             </button>
-          </div>
-
-          {/* Quick Demo Switcher untuk penguji sistem */}
-          <div className="pt-4 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-400 mb-2">
-              [Mode Evaluasi] Ingin menguji peran lain atau membuka akun ini?
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              <button
-                onClick={() => switchRole('admin')}
-                className="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium transition-colors cursor-pointer"
-              >
-                Ganti ke Akun Admin
-              </button>
-              <button
-                onClick={() => switchRole('kepala')}
-                className="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium transition-colors cursor-pointer"
-              >
-                Ganti ke Akun Kepala
-              </button>
-              <button
-                onClick={() => switchRole('wali', 'aktif')}
-                className="text-xs px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md font-medium transition-colors cursor-pointer"
-              >
-                Ganti ke Wali Aktif
-              </button>
-            </div>
           </div>
         </div>
       </div>
