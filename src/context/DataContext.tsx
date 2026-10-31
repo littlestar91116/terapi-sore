@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Package,
   Teacher,
@@ -37,14 +37,27 @@ import {
   syncTeacherToSupabase,
   deleteTeacherFromSupabase,
   fetchTeachersFromSupabase,
+  syncPackageToSupabase,
+  fetchPackagesFromSupabase,
   syncScheduleToSupabase,
+  deleteScheduleFromSupabase,
+  fetchSchedulesFromSupabase,
   syncSessionToSupabase,
+  fetchSessionsFromSupabase,
   syncPaymentToSupabase,
+  fetchPaymentsFromSupabase,
   syncStudentLeaveToSupabase,
+  fetchStudentLeavesFromSupabase,
   syncTeacherLeaveToSupabase,
+  fetchTeacherLeavesFromSupabase,
   syncSaldoHistoryToSupabase,
+  fetchSaldoHistoryFromSupabase,
   pushAllLocalDataToSupabase,
+  subscribeSyncStatus,
+  getSyncStatus,
+  SyncStatusInfo,
 } from '../lib/supabaseSync';
+import { getSupabase } from '../lib/supabase';
 
 interface DataContextType {
   // Master Packages
@@ -133,7 +146,8 @@ interface DataContextType {
   activeMonth: string;
   setActiveMonth: (month: string) => void;
 
-  // Supabase Sync Action
+  // Supabase Sync Action & Real-time Status
+  syncStatus: SyncStatusInfo;
   syncAllToSupabase: (usersList: any[]) => Promise<{
     success: boolean;
     totalSynced: number;
@@ -161,6 +175,7 @@ function getInitialData<T>(key: string, seed: T): T {
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeMonth, setActiveMonth] = useState<string>(CURRENT_MONTH);
+  const [syncStatus, setSyncStatusState] = useState<SyncStatusInfo>(() => getSyncStatus());
 
   const [packages, setPackages] = useState<Package[]>(() =>
     getInitialData('packages', SEED_PACKAGES)
@@ -195,6 +210,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [financialSettings, setFinancialSettings] = useState<FinancialSettings>(() =>
     getInitialData('financial_settings', SEED_FINANCIAL_SETTINGS)
   );
+
+  // Status sinkronisasi real-time
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((info) => {
+      setSyncStatusState(info);
+    });
+    return unsubscribe;
+  }, []);
 
   // Sync to localStorage
   useEffect(() => {
@@ -231,44 +254,167 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(LS_PREFIX + 'financial_settings', JSON.stringify(financialSettings));
   }, [financialSettings]);
 
+  // Flag untuk mendeteksi apakah data awal dari Supabase sudah selesai dimuat
+  const isInitialLoadDoneRef = useRef(false);
+
   // Muat data dari Supabase saat aplikasi dibuka jika Supabase terhubung
   useEffect(() => {
-    fetchStudentsFromSupabase().then((remote) => {
-      if (remote && remote.length > 0) {
-        setStudents((prev) => {
-          const merged = [...prev];
-          for (const r of remote) {
-            const idx = merged.findIndex((m) => m.id === r.id);
-            if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
-            else merged.push(r);
-          }
-          return merged;
-        });
+    async function loadRemoteData() {
+      const client = getSupabase();
+      if (!client) {
+        isInitialLoadDoneRef.current = true;
+        return;
       }
-    });
 
-    fetchTeachersFromSupabase().then((remote) => {
-      if (remote && remote.length > 0) {
-        setTeachers((prev) => {
-          const merged = [...prev];
-          for (const r of remote) {
-            const idx = merged.findIndex((m) => m.id === r.id);
-            if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
-            else merged.push(r);
-          }
-          return merged;
-        });
+      try {
+        const [
+          remoteStudents,
+          remoteTeachers,
+          remotePackages,
+          remoteSchedules,
+          remoteSessions,
+          remotePayments,
+          remoteStudentLeaves,
+          remoteTeacherLeaves,
+          remoteSaldoHistory,
+        ] = await Promise.all([
+          fetchStudentsFromSupabase(),
+          fetchTeachersFromSupabase(),
+          fetchPackagesFromSupabase(),
+          fetchSchedulesFromSupabase(),
+          fetchSessionsFromSupabase(),
+          fetchPaymentsFromSupabase(),
+          fetchStudentLeavesFromSupabase(),
+          fetchTeacherLeavesFromSupabase(),
+          fetchSaldoHistoryFromSupabase(),
+        ]);
+
+        if (remoteStudents && remoteStudents.length > 0) {
+          setStudents((prev) => {
+            const merged = [...prev];
+            for (const r of remoteStudents) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteTeachers && remoteTeachers.length > 0) {
+          setTeachers((prev) => {
+            const merged = [...prev];
+            for (const r of remoteTeachers) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remotePackages && remotePackages.length > 0) {
+          setPackages((prev) => {
+            const merged = [...prev];
+            for (const r of remotePackages) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteSchedules && remoteSchedules.length > 0) {
+          setSchedules((prev) => {
+            const merged = [...prev];
+            for (const r of remoteSchedules) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteSessions && remoteSessions.length > 0) {
+          setSessions((prev) => {
+            const merged = [...prev];
+            for (const r of remoteSessions) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remotePayments && remotePayments.length > 0) {
+          setPayments((prev) => {
+            const merged = [...prev];
+            for (const r of remotePayments) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteStudentLeaves && remoteStudentLeaves.length > 0) {
+          setStudentLeaves((prev) => {
+            const merged = [...prev];
+            for (const r of remoteStudentLeaves) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteTeacherLeaves && remoteTeacherLeaves.length > 0) {
+          setTeacherLeaves((prev) => {
+            const merged = [...prev];
+            for (const r of remoteTeacherLeaves) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteSaldoHistory && remoteSaldoHistory.length > 0) {
+          setSaldoHistory((prev) => {
+            const merged = [...prev];
+            for (const r of remoteSaldoHistory) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+      } catch (e) {
+        console.warn('Gagal sinkron awal dari Supabase:', e);
+      } finally {
+        isInitialLoadDoneRef.current = true;
       }
-    });
+    }
+
+    loadRemoteData();
   }, []);
 
   // Packages CRUD
   const updatePackage = (pkg: Package) => {
     setPackages((prev) => prev.map((p) => (p.id === pkg.id ? pkg : p)));
+    syncPackageToSupabase(pkg);
   };
 
   const addPackage = (pkg: Package) => {
     setPackages((prev) => [...prev, pkg]);
+    syncPackageToSupabase(pkg);
   };
 
   // Teachers CRUD
@@ -394,7 +540,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSchedules((prev) => [...prev, newSchedule]);
     setSessions((prev) => [...prev, ...newSessionsWithIds]);
 
-    // Kirim langsung ke Supabase
+    // Kirim langsung otomatis ke Supabase
     syncScheduleToSupabase(newSchedule);
     newSessionsWithIds.forEach((s) => syncSessionToSupabase(s));
 
@@ -404,6 +550,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteSchedule = (scheduleId: string) => {
     setSchedules((prev) => prev.filter((s) => s.id !== scheduleId));
     setSessions((prev) => prev.filter((s) => s.scheduleId !== scheduleId));
+    deleteScheduleFromSupabase(scheduleId);
   };
 
   // Mark Attendance + Otomatis Saldo Jam jika "Libur dari sekolah"
@@ -435,9 +582,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (status === 'Libur dari sekolah' && previousStatus !== 'Libur dari sekolah') {
       const hoursToAdd = targetSession.durationHours;
       setStudents((prev) =>
-        prev.map((st) =>
-          st.id === targetSession.studentId ? { ...st, saldoJam: st.saldoJam + hoursToAdd } : st
-        )
+        prev.map((st) => {
+          if (st.id === targetSession.studentId) {
+            const updatedSt = { ...st, saldoJam: st.saldoJam + hoursToAdd };
+            syncStudentToSupabase(updatedSt);
+            return updatedSt;
+          }
+          return st;
+        })
       );
 
       const historyItem: SaldoJamHistory = {
@@ -450,6 +602,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       };
       setSaldoHistory((prev) => [historyItem, ...prev]);
+      syncSaldoHistoryToSupabase(historyItem);
     }
   };
 
@@ -489,6 +642,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setStudentLeaves((prev) => [newLeave, ...prev]);
+    syncStudentLeaveToSupabase(newLeave);
     return { success: true, message: 'Permohonan izin berhasil diajukan.' };
   };
 
@@ -501,34 +655,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetLeave = studentLeaves.find((l) => l.id === leaveId);
     if (!targetLeave) return;
 
+    const updatedLeave: StudentLeave = {
+      ...targetLeave,
+      status,
+      reviewedBy: reviewerName,
+      reviewedAt: new Date().toISOString(),
+      rejectionReason,
+    };
+
     setStudentLeaves((prev) =>
-      prev.map((l) =>
-        l.id === leaveId
-          ? {
-              ...l,
-              status,
-              reviewedBy: reviewerName,
-              reviewedAt: new Date().toISOString(),
-              rejectionReason,
-            }
-          : l
-      )
+      prev.map((l) => (l.id === leaveId ? updatedLeave : l))
     );
+    syncStudentLeaveToSupabase(updatedLeave);
 
     // Jika disetujui, ubah status absensi sesi terkait menjadi 'Izin'
     if (status === 'disetujui') {
       setSessions((prev) =>
-        prev.map((s) =>
-          s.id === targetLeave.sessionId
-            ? {
-                ...s,
-                attendanceStatus: 'Izin',
-                attendanceNotes: `Izin disetujui: ${targetLeave.reason}`,
-                markedAt: new Date().toISOString(),
-                markedBy: reviewerName,
-              }
-            : s
-        )
+        prev.map((s) => {
+          if (s.id === targetLeave.sessionId) {
+            const updatedSes: TherapySession = {
+              ...s,
+              attendanceStatus: 'Izin',
+              attendanceNotes: `Izin disetujui: ${targetLeave.reason}`,
+              markedAt: new Date().toISOString(),
+              markedBy: reviewerName,
+            };
+            syncSessionToSupabase(updatedSes);
+            return updatedSes;
+          }
+          return s;
+        })
       );
     }
   };
@@ -543,6 +699,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'menunggu',
     };
     setTeacherLeaves((prev) => [newLeave, ...prev]);
+    syncTeacherLeaveToSupabase(newLeave);
   };
 
   const reviewTeacherLeave = (
@@ -551,20 +708,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     reviewerName: string
   ) => {
     setTeacherLeaves((prev) =>
-      prev.map((l) =>
-        l.id === leaveId
-          ? {
-              ...l,
-              status,
-              reviewedBy: reviewerName,
-              reviewedAt: new Date().toISOString(),
-            }
-          : l
-      )
+      prev.map((l) => {
+        if (l.id === leaveId) {
+          const updated: TeacherLeave = {
+            ...l,
+            status,
+            reviewedBy: reviewerName,
+            reviewedAt: new Date().toISOString(),
+          };
+          syncTeacherLeaveToSupabase(updated);
+          return updated;
+        }
+        return l;
+      })
     );
   };
 
-  // Batch input hari libur sekolah (Pilih tanggal, sistem otomatis menambah saldo ke semua siswa yang terjadwal)
+  // Batch input hari libur sekolah
   const batchInputSchoolHoliday = (holidayDate: string, description: string): number => {
     const matchingSessions = sessions.filter(
       (s) => s.sessionDate === holidayDate && s.attendanceStatus !== 'Libur dari sekolah'
@@ -574,16 +734,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Update semua sesi tersebut menjadi Libur dari sekolah
     setSessions((prev) =>
-      prev.map((s) =>
-        s.sessionDate === holidayDate
-          ? {
-              ...s,
-              attendanceStatus: 'Libur dari sekolah',
-              attendanceNotes: description || 'Diliburkan sekolah',
-              markedAt: new Date().toISOString(),
-            }
-          : s
-      )
+      prev.map((s) => {
+        if (s.sessionDate === holidayDate) {
+          const updated: TherapySession = {
+            ...s,
+            attendanceStatus: 'Libur dari sekolah',
+            attendanceNotes: description || 'Diliburkan sekolah',
+            markedAt: new Date().toISOString(),
+          };
+          syncSessionToSupabase(updated);
+          return updated;
+        }
+        return s;
+      })
     );
 
     // Tambahkan saldo jam ke masing-masing siswa
@@ -594,15 +757,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const hoursToAdd = studentSessionsOnDate.reduce((sum, s) => sum + s.durationHours, 0);
 
         if (hoursToAdd > 0) {
-          newHistories.push({
+          const historyItem: SaldoJamHistory = {
             id: `SLD-${Date.now().toString(36).toUpperCase()}-${student.id}`,
             studentId: student.id,
             type: 'penambahan',
             amountHours: hoursToAdd,
             description: `${description || 'Sekolah meliburkan'} pada tanggal ${holidayDate}`,
             createdAt: new Date().toISOString(),
-          });
-          return { ...student, saldoJam: student.saldoJam + hoursToAdd };
+          };
+          newHistories.push(historyItem);
+          syncSaldoHistoryToSupabase(historyItem);
+
+          const updatedStudent = { ...student, saldoJam: student.saldoJam + hoursToAdd };
+          syncStudentToSupabase(updatedStudent);
+          return updatedStudent;
         }
         return student;
       })
@@ -618,7 +786,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target || target.saldoJam < hours) return false;
 
     setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, saldoJam: s.saldoJam - hours } : s))
+      prev.map((s) => {
+        if (s.id === studentId) {
+          const updated = { ...s, saldoJam: s.saldoJam - hours };
+          syncStudentToSupabase(updated);
+          return updated;
+        }
+        return s;
+      })
     );
 
     const history: SaldoJamHistory = {
@@ -630,6 +805,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
     setSaldoHistory((prev) => [history, ...prev]);
+    syncSaldoHistoryToSupabase(history);
     return true;
   };
 
@@ -679,14 +855,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!existingStudentPayments.has(student.id)) {
         const pkg = packages.find((p) => p.id === student.packageId);
         if (pkg) {
-          newPayments.push({
+          const item: Payment = {
             id: `INV-${Date.now().toString(36).toUpperCase()}-${student.id}`,
             studentId: student.id,
             monthYear,
             amount: pkg.priceMonthly,
             status: 'belum_lunas',
             createdAt: new Date().toISOString(),
-          });
+          };
+          newPayments.push(item);
+          syncPaymentToSupabase(item);
         }
       }
     });
@@ -701,16 +879,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFinancialSettings(settings);
   };
 
-  /**
-   * Aturan perhitungan gaji guru:
-   * - Sistem per jam: total jam terapi yang benar-benar diajar (status = 'Hadir') × tarif per jam
-   * - Sistem bulanan: nominal gaji tetap per guru
-   * - Bonus otomatis Rp 50.000 jika guru hadir penuh sebulan tanpa izin sama sekali
-   * - Potongan: jika guru izin > 1 kali dalam sebulan, gaji dipotong sebesar (jumlah hari izin * nominal potongan harian)
-   */
   const calculatePayrollForMonth = (monthYear: string) => {
     const calculatedPayrolls: Payroll[] = teachers.map((teacher) => {
-      // Sesi terapi yang benar-benar diajar (status = 'Hadir') di bulan ini
       const taughtSessions = sessions.filter(
         (s) =>
           s.teacherId === teacher.id &&
@@ -720,7 +890,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const totalHoursTaught = taughtSessions.reduce((sum, s) => sum + s.durationHours, 0);
 
-      // Hitung izin guru yang disetujui di bulan ini
       const approvedLeaves = teacherLeaves.filter(
         (l) =>
           l.teacherId === teacher.id &&
@@ -729,10 +898,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       const totalLeaveDays = approvedLeaves.length;
 
-      // Bonus kehadiran penuh (jika tanpa izin sama sekali = 0 izin)
       const bonusFullAttendance = totalLeaveDays === 0 ? financialSettings.fullAttendanceBonus : 0;
-
-      // Potongan: jika izin lebih dari 1 kali (>= 2 kali)
       const deductionLeave =
         totalLeaveDays > 1 ? totalLeaveDays * financialSettings.dailyLeaveDeduction : 0;
 
@@ -765,7 +931,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     setPayrolls((prev) => {
-      // Gantikan payroll untuk bulan ini atau tambahkan
       const otherMonths = prev.filter((p) => p.monthYear !== monthYear);
       return [...otherMonths, ...calculatedPayrolls];
     });
@@ -835,6 +1000,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markPayrollPaid,
         activeMonth,
         setActiveMonth,
+        syncStatus,
         syncAllToSupabase,
       }}
     >

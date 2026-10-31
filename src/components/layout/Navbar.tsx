@@ -25,7 +25,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobileMenu }) => {
   const { currentUser, currentRole, switchRole, logout } = useAuth();
-  const { activeMonth, setActiveMonth } = useData();
+  const { activeMonth, setActiveMonth, syncStatus } = useData();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
 
   const roleLabels: Record<UserRole, { label: string; icon: React.ReactNode; color: string }> = {
@@ -88,15 +88,57 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobil
             </select>
           </div>
 
-          {/* Tombol Panduan & Status Supabase */}
+          {/* Status Sinkronisasi Otomatis Supabase */}
           <button
             type="button"
             onClick={onOpenSupabaseGuide}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
-            title="Lihat Schema SQL & Panduan Supabase"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+              syncStatus.status === 'syncing'
+                ? 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
+                : syncStatus.status === 'saved'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                : syncStatus.status === 'error'
+                ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700'
+            }`}
+            title={
+              syncStatus.status === 'syncing'
+                ? 'Sedang menyimpan perubahan data ke database Supabase secara otomatis...'
+                : syncStatus.status === 'saved'
+                ? `Tersimpan otomatis ke Supabase. ${
+                    syncStatus.lastSavedAt
+                      ? `Terakhir disimpan pukul ${syncStatus.lastSavedAt.toLocaleTimeString('id-ID')}`
+                      : ''
+                  }`
+                : syncStatus.status === 'error'
+                ? `Penyimpanan terkendala: ${syncStatus.message}. Klik untuk melihat status.`
+                : 'Klik untuk konfigurasi kredensial Supabase & panduan SQL'
+            }
           >
-            <Database className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">Supabase & SQL</span>
+            {syncStatus.status === 'syncing' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <Database className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                <span className="hidden sm:inline">Menyimpan...</span>
+              </>
+            ) : syncStatus.status === 'saved' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <Database className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline font-bold">Supabase: Tersimpan Otomatis</span>
+              </>
+            ) : syncStatus.status === 'error' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-bounce" />
+                <Database className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Supabase Terkendala</span>
+              </>
+            ) : (
+              <>
+                <Database className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Supabase & SQL</span>
+              </>
+            )}
           </button>
 
           {/* Peran Akun Badge */}
