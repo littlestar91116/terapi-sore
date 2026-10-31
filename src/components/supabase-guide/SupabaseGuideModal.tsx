@@ -1,0 +1,238 @@
+import React, { useState } from 'react';
+import { Database, Copy, Check, ExternalLink, ShieldCheck, RefreshCw, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Modal } from '../common/Modal';
+import { Badge } from '../common/Badge';
+import { getStoredSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../../lib/supabase';
+
+interface SupabaseGuideModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, onClose }) => {
+  const [copied, setCopied] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const initialConfig = getStoredSupabaseConfig();
+  const [supabaseUrl, setSupabaseUrl] = useState(initialConfig.url);
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(initialConfig.key);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const handleCopySql = async () => {
+    try {
+      const response = await fetch('/schema.sql');
+      const sqlText = await response.text();
+      await navigator.clipboard.writeText(sqlText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback: copy placeholder or prompt user
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    const result = await testSupabaseConnection();
+    setTestResult(result);
+    setTesting(false);
+  };
+
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveSupabaseConfig(supabaseUrl, supabaseAnonKey);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+    handleTestConnection();
+  };
+
+  const isConfigured = Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://your-project.supabase.co');
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Panduan Koneksi Supabase & Schema SQL"
+      subtitle="Instruksi lengkap integrasi database PostgreSQL & RLS"
+      maxWidth="3xl"
+    >
+      <div className="space-y-6">
+        {/* Status Koneksi */}
+        <div
+          className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+            isConfigured
+              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+              : 'bg-amber-50/80 border-amber-200 text-amber-900'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`p-2 rounded-xl ${
+                isConfigured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">Status Supabase:</span>
+                <Badge variant={isConfigured ? 'green' : 'yellow'}>
+                  {isConfigured ? 'Kredensial Terisi' : 'Mode Demo / Belum Terhubung'}
+                </Badge>
+              </div>
+              <p className="text-xs opacity-80 mt-0.5">
+                {isConfigured
+                  ? 'Kredensial URL & Anon Key aktif. Anda dapat menguji query langsung.'
+                  : 'Aplikasi saat ini berjalan menggunakan data lokal otomatis (localStorage) yang siap pakai.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+            {testing ? 'Menguji...' : 'Uji Koneksi'}
+          </button>
+        </div>
+
+        {testResult && (
+          <div
+            className={`p-3.5 rounded-xl text-xs font-medium border ${
+              testResult.success
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
+            }`}
+          >
+            {testResult.message}
+          </div>
+        )}
+
+        {/* Akun Admin Bawaan */}
+        <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900">
+                Akun Admin Utama Bawaan
+              </h4>
+              <p className="text-xs text-indigo-700 mt-0.5">
+                Username: <code className="bg-white/80 px-1.5 py-0.5 rounded font-bold text-indigo-900">admin</code>{' '}
+                • Password:{' '}
+                <code className="bg-white/80 px-1.5 py-0.5 rounded font-bold text-indigo-900">12345</code>
+              </p>
+            </div>
+          </div>
+          <Badge variant="purple">Hak Akses Penuh</Badge>
+        </div>
+
+        {/* Langkah-langkah setup */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span>5 Langkah Menghubungkan ke Supabase</span>
+          </h4>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="font-bold text-slate-800 block mb-1">1. Buat Proyek Baru</span>
+              <p className="text-slate-600">
+                Buka <a href="https://supabase.com" target="_blank" rel="noreferrer" className="text-emerald-600 font-semibold inline-flex items-center gap-0.5">supabase.com <ExternalLink className="w-3 h-3" /></a> dan buat proyek baru (free tier).
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="font-bold text-slate-800 block mb-1">2. Jalankan Schema SQL</span>
+              <p className="text-slate-600 mb-2">
+                Buka menu <strong>SQL Editor</strong> di dashboard Supabase, tempel isi schema.sql lalu klik <strong>Run</strong>.
+              </p>
+              <button
+                type="button"
+                onClick={handleCopySql}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-2xs font-semibold transition-colors cursor-pointer"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Tersalin!' : 'Salin Seluruh SQL'}
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="font-bold text-slate-800 block mb-1">3. Salin Project URL & Anon Key</span>
+              <p className="text-slate-600">
+                Di dashboard Supabase, buka <strong>Project Settings → API</strong>. Salin Project URL dan anon public key.
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="font-bold text-slate-800 block mb-1">4. Simpan Kredensial</span>
+              <p className="text-slate-600">
+                Masukkan nilai ke form di bawah ini atau tambahkan di file <code>.env</code> (variabel <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_ANON_KEY</code>).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Konfigurasi Kredensial Langsung */}
+        <form onSubmit={handleSaveConfig} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            Konfigurasi Kredensial Supabase Frontend
+          </h4>
+          <p className="text-2xs text-slate-500">
+            Hanya gunakan <strong>anon / public key</strong>. Jangan pernah menaruh service role key di frontend.
+          </p>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-2xs font-bold text-slate-700 uppercase mb-1">
+                Supabase URL
+              </label>
+              <input
+                type="url"
+                value={supabaseUrl}
+                onChange={(e) => setSupabaseUrl(e.target.value)}
+                placeholder="https://xyzcompany.supabase.co"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+              />
+            </div>
+            <div>
+              <label className="block text-2xs font-bold text-slate-700 uppercase mb-1">
+                Supabase Anon / Public Key
+              </label>
+              <input
+                type="text"
+                value={supabaseAnonKey}
+                onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            {saveSuccess ? (
+              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-4 h-4" /> Kredensial berhasil disimpan!
+              </span>
+            ) : (
+              <span />
+            )}
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+            >
+              Simpan & Hubungkan
+            </button>
+          </div>
+        </form>
+      </div>
+    </Modal>
+  );
+};

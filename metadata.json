@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Absensi & Keuangan Terapi Siswa",
+  "description": "Sistem terpadu manajemen absensi, jadwal sesi terapi, perizinan, saldo jam, pembayaran & cetak kwitansi, serta penggajian guru.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

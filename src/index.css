@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Print Optimization */
+  @media print {
+    body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-size: 12pt;
+    }
+
+    header,
+    aside,
+    nav,
+    button,
+    .print\:hidden {
+      display: none !important;
+    }
+
+    #printable-receipt,
+    .printable-slip {
+      border: 1px solid #000 !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      padding: 1.5rem !important;
+      display: block !important;
+    }
+  }
+}
