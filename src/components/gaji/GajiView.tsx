@@ -16,6 +16,7 @@ import { Payroll, Teacher, FinancialSettings } from '../../types';
 import { Badge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { formatRupiah, terbilangRupiah } from '../../lib/numberToIndonesianWords';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export const GajiView: React.FC = () => {
   const { currentRole, currentUser } = useAuth();
@@ -365,9 +366,18 @@ export const GajiView: React.FC = () => {
             {/* Lembar Slip Gaji */}
             <div className="bg-white border-2 border-slate-300 rounded-2xl p-6 sm:p-8 space-y-5 text-slate-800">
               <div className="flex items-start justify-between border-b-2 border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">KLINIK TERAPI SISWA CERIA</h3>
-                  <p className="text-xs text-slate-600">SLIP GAJI & HONORARIUM TENAGA AHLI</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center p-1 border border-slate-200 shadow-2xs shrink-0">
+                    <img
+                      src={APP_CONFIG.logoUrl}
+                      alt="Little Star Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 uppercase">{APP_CONFIG.name}</h3>
+                    <p className="text-xs text-slate-600">SLIP GAJI & HONORARIUM TENAGA AHLI</p>
+                  </div>
                 </div>
                 <div className="text-right text-xs">
                   <p className="font-bold text-slate-900">Periode: {viewingSlip.payroll.monthYear}</p>

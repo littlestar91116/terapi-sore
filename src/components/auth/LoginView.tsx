@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { APP_CONFIG } from '../../config/appConfig';
 
 interface LoginViewProps {
   onOpenSupabaseGuide: () => void;
@@ -53,12 +54,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200">
         {/* Header Branding */}
         <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 p-8 text-white text-center relative">
-          <div className="w-14 h-14 bg-white/15 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-inner backdrop-blur-xs ring-1 ring-white/20">
-            <Sparkles className="w-7 h-7 text-white" />
+          <div className="w-20 h-20 bg-white/95 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-md p-1.5 ring-1 ring-white/30">
+            <img
+              src={APP_CONFIG.logoUrl}
+              alt="Little Star Learning Center"
+              className="w-full h-full object-contain"
+            />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">Klinik Terapi Siswa Ceria</h1>
+          <h1 className="text-xl font-bold tracking-tight">{APP_CONFIG.name}</h1>
           <p className="text-emerald-100 text-xs mt-1">
-            Sistem Informasi Absensi & Keuangan Terapi Siswa
+            {APP_CONFIG.tagline}
           </p>
         </div>
 
@@ -138,7 +143,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
             <p className="text-2xs text-slate-500">
               Lupa kata sandi atau butuh akses akun baru?
               <br />
-              Silakan hubungi bagian <strong>Administrasi Klinik</strong>.
+              Silakan hubungi bagian <strong>Administrasi {APP_CONFIG.name}</strong>.
             </p>
 
             <div className="pt-2">
@@ -157,7 +162,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
 
       {/* Footer Info */}
       <div className="mt-6 text-center text-3xs text-slate-500">
-        © 2026 Klinik Terapi Siswa Ceria • Seluruh hak cipta dilindungi.
+        © 2026 {APP_CONFIG.name} • Seluruh hak cipta dilindungi.
       </div>
     </div>
   );

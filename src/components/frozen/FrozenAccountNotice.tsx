@@ -3,6 +3,7 @@ import { AlertOctagon, Phone, CreditCard, Clock, LogOut, CheckCircle2 } from 'lu
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { formatRupiah } from '../../lib/numberToIndonesianWords';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export const FrozenAccountNotice: React.FC = () => {
   const { currentUser, logout, switchRole } = useAuth();
@@ -29,9 +30,19 @@ export const FrozenAccountNotice: React.FC = () => {
         {/* Banner Atas */}
         <div className="bg-gradient-to-r from-rose-600 to-red-600 p-8 text-white text-center relative overflow-hidden">
           <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-          <div className="inline-flex p-3.5 bg-white/15 rounded-2xl mb-3 backdrop-blur-xs ring-1 ring-white/20 shadow-inner">
-            <AlertOctagon className="w-10 h-10 text-white" />
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center p-1.5 shadow-md">
+              <img
+                src={APP_CONFIG.logoUrl}
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div className="p-3 bg-white/15 rounded-2xl backdrop-blur-xs ring-1 ring-white/20 shadow-inner">
+              <AlertOctagon className="w-8 h-8 text-white" />
+            </div>
           </div>
+          <p className="text-rose-200 text-xs font-bold uppercase tracking-wider mb-1">{APP_CONFIG.name}</p>
           <h1 className="text-2xl font-bold tracking-tight">Akun Anda Sedang Dibekukan</h1>
           <p className="text-rose-100 text-sm mt-1 max-w-md mx-auto">
             Akses ke jadwal terapi dan pengajuan izin sementara dinonaktifkan karena terdapat

@@ -4,6 +4,7 @@ import { NavTabId } from './Sidebar';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { AppModule } from '../../types';
+import { APP_CONFIG } from '../../config/appConfig';
 
 interface MobileNavProps {
   isOpen: boolean;
@@ -70,13 +71,19 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       <div className="fixed inset-y-0 left-0 w-72 max-w-[80vw] bg-white p-5 shadow-2xl flex flex-col justify-between">
         <div className="space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-sm">
-                ST
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center p-1 border border-slate-200 shadow-2xs shrink-0">
+                <img
+                  src={APP_CONFIG.logoUrl}
+                  alt="Little Star Logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
-              <span className="font-bold text-slate-800 text-sm">Menu Terapi</span>
+              <span className="font-bold text-slate-800 text-xs leading-tight">
+                {APP_CONFIG.name}
+              </span>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>

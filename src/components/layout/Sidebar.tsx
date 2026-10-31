@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { AppModule } from '../../types';
+import { APP_CONFIG } from '../../config/appConfig';
 
 export type NavTabId =
   | 'dashboard'
@@ -190,9 +191,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
 
       {/* Info Lembaga Bawah */}
       <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-2xl text-2xs text-slate-500">
-        <p className="font-bold text-slate-700">Klinik Terapi Siswa Ceria</p>
+        <p className="font-bold text-slate-800">{APP_CONFIG.name}</p>
         <p className="mt-0.5">Operasional: Sen-Kam & Sab-Min</p>
-        <p className="text-3xs text-slate-400 mt-1">Jumat: Libur Resmi</p>
+        <p className="text-3xs text-slate-400 mt-1">Jumat: Libur Resmi • {APP_CONFIG.phone}</p>
       </div>
     </aside>
   );

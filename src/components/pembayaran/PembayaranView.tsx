@@ -22,7 +22,7 @@ import { KwitansiModal } from '../kwitansi/KwitansiModal';
 import { formatRupiah } from '../../lib/numberToIndonesianWords';
 
 export const PembayaranView: React.FC = () => {
-  const { currentRole, currentUser } = useAuth();
+  const { currentRole, currentUser, syncFreezeStudent } = useAuth();
   const {
     payments,
     students,
@@ -298,8 +298,12 @@ export const PembayaranView: React.FC = () => {
                           {/* Tombol Bekukan Akun untuk Tunggakan (Admin & Kepala) */}
                           {canManagePayment && !isPaid && student && (
                             <button
-                              onClick={() => toggleStudentFreeze(student.id, !isFrozen)}
-                              title={isFrozen ? 'Buka Pembekuan' : 'Bekukan Akun Karena Menunggak'}
+                              onClick={() => {
+                                const nextState = !isFrozen;
+                                toggleStudentFreeze(student.id, nextState);
+                                syncFreezeStudent(student.id, nextState);
+                              }}
+                              title={isFrozen ? 'Buka Pembekuan Akun Siswa & Wali' : 'Bekukan Akun Karena Menunggak'}
                               className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
                                 isFrozen
                                   ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'

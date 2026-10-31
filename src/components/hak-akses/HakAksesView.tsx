@@ -18,7 +18,15 @@ import { Modal } from '../common/Modal';
 import { SEED_USERS } from '../../data/seedData';
 
 export const HakAksesView: React.FC = () => {
-  const { currentRole, permissions, updatePermissions } = useAuth();
+  const {
+    currentRole,
+    permissions,
+    updatePermissions,
+    users,
+    addUserAccount,
+    updateUserAccount,
+    deleteUserAccount,
+  } = useAuth();
 
   // Guard: Hanya admin yang boleh membuka modul ini
   if (currentRole !== 'admin') {
@@ -37,8 +45,10 @@ export const HakAksesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'matriks' | 'users'>('matriks');
   const [selectedRole, setSelectedRole] = useState<UserRole>('kepala');
 
-  // Local User Accounts state
-  const [userList, setUserList] = useState<UserProfile[]>(SEED_USERS);
+  // Search & Filter for User Accounts
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'semua' | UserRole>('semua');
+
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
@@ -46,16 +56,20 @@ export const HakAksesView: React.FC = () => {
     username: string;
     fullName: string;
     role: UserRole;
+    position: string;
     phone: string;
     email: string;
     status: AccountStatus;
+    password?: string;
   }>({
     username: '',
     fullName: '',
     role: 'guru',
+    position: 'Guru Terapis',
     phone: '',
     email: '',
     status: 'aktif',
+    password: '123',
   });
 
   const moduleNames: { id: AppModule; label: string }[] = [
@@ -103,9 +117,11 @@ export const HakAksesView: React.FC = () => {
       username: '',
       fullName: '',
       role: 'guru',
+      position: 'Guru Terapis',
       phone: '',
       email: '',
       status: 'aktif',
+      password: '123',
     });
     setIsUserModalOpen(true);
   };
@@ -116,9 +132,11 @@ export const HakAksesView: React.FC = () => {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
+      position: user.position || (user.role === 'wali' ? 'Wali Murid' : 'Guru Terapis'),
       phone: user.phone || '',
       email: user.email || '',
       status: user.status,
+      password: user.password || '123',
     });
     setIsUserModalOpen(true);
   };
@@ -128,15 +146,16 @@ export const HakAksesView: React.FC = () => {
     if (!userForm.username.trim() || !userForm.fullName.trim()) return;
 
     if (editingUser) {
-      setUserList((prev) =>
-        prev.map((u) => (u.id === editingUser.id ? { ...u, ...userForm } : u))
-      );
+      updateUserAccount({
+        id: editingUser.id,
+        ...userForm,
+      });
     } else {
-      const newUser: UserProfile = {
+      const newUser: UserProfile & { password?: string } = {
         id: `usr-${Date.now().toString(36)}`,
         ...userForm,
       };
-      setUserList((prev) => [...prev, newUser]);
+      addUserAccount(newUser);
     }
     setIsUserModalOpen(false);
   };
@@ -304,15 +323,47 @@ export const HakAksesView: React.FC = () => {
       {/* TAB 2: MANAJEMEN AKUN PENGGUNA */}
       {activeTab === 'users' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-slate-900">Daftar Akun Pengguna Terdaftar</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Daftar Akun Pengguna Terdaftar</h3>
+              <p className="text-2xs text-slate-500">
+                Semua akun dibuat dan disinkronkan otomatis dari Data Siswa, Guru/Staf, atau dibuat manual.
+              </p>
+            </div>
             <button
               onClick={handleOpenAddUser}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer inline-flex items-center gap-1.5 self-start sm:self-auto"
             >
               <Plus className="w-3.5 h-3.5" />
-              Buat Akun Baru
+              Buat Akun Manual
             </button>
+          </div>
+
+          {/* Search & Role Filter Bar */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="Cari berdasarkan username, nama lengkap, atau jabatan..."
+                className="w-full pl-3 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xs font-bold text-slate-500">Filter Peran:</span>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value as any)}
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden cursor-pointer font-semibold text-slate-700"
+              >
+                <option value="semua">Semua Peran ({users.length})</option>
+                <option value="admin">Admin</option>
+                <option value="kepala">Kepala</option>
+                <option value="guru">Guru</option>
+                <option value="wali">Wali Murid</option>
+              </select>
+            </div>
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
@@ -320,61 +371,104 @@ export const HakAksesView: React.FC = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/70 border-b border-slate-200/80 text-2xs font-bold uppercase tracking-wider text-slate-500">
-                    <th className="px-5 py-3.5">Username</th>
-                    <th className="px-4 py-3.5">Nama Lengkap</th>
+                    <th className="px-5 py-3.5">Username & ID</th>
+                    <th className="px-4 py-3.5">Nama & Jabatan</th>
                     <th className="px-4 py-3.5">Peran (Role)</th>
-                    <th className="px-4 py-3.5">Kontak</th>
+                    <th className="px-4 py-3.5">Password</th>
                     <th className="px-4 py-3.5 text-center">Status</th>
                     <th className="px-5 py-3.5 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                  {userList.map((user) => (
-                    <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-5 py-4 font-mono font-bold text-slate-900">
-                        @{user.username}
-                      </td>
-                      <td className="px-4 py-4 font-semibold text-slate-800">{user.fullName}</td>
-                      <td className="px-4 py-4 capitalize">
-                        <Badge
-                          variant={
-                            user.role === 'admin'
-                              ? 'purple'
-                              : user.role === 'kepala'
-                              ? 'blue'
-                              : user.role === 'guru'
-                              ? 'green'
-                              : 'yellow'
-                          }
-                        >
-                          {user.role}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-4 text-slate-500">{user.phone || '-'}</td>
-                      <td className="px-4 py-4 text-center">
-                        <Badge
-                          variant={
-                            user.status === 'aktif'
-                              ? 'green'
-                              : user.status === 'dibekukan'
-                              ? 'red'
-                              : 'gray'
-                          }
-                        >
-                          {user.status}
-                        </Badge>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <button
-                          onClick={() => handleOpenEditUser(user)}
-                          className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          Ubah
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {users
+                    .filter((u) => {
+                      const matchRole = roleFilter === 'semua' || u.role === roleFilter;
+                      const q = userSearch.toLowerCase();
+                      const matchSearch =
+                        u.username.toLowerCase().includes(q) ||
+                        u.fullName.toLowerCase().includes(q) ||
+                        (u.position && u.position.toLowerCase().includes(q)) ||
+                        (u.phone && u.phone.includes(q));
+                      return matchRole && matchSearch;
+                    })
+                    .map((user) => (
+                      <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="font-mono font-bold text-slate-900 text-xs">
+                            @{user.username}
+                          </div>
+                          <span className="text-3xs text-slate-400 font-mono">{user.id}</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-slate-900">{user.fullName}</div>
+                          <span className="inline-block text-3xs font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 mt-0.5">
+                            {user.position || (user.role === 'wali' ? 'Wali Murid' : 'Guru Terapis')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 capitalize">
+                          <Badge
+                            variant={
+                              user.role === 'admin'
+                                ? 'purple'
+                                : user.role === 'kepala'
+                                ? 'blue'
+                                : user.role === 'guru'
+                                ? 'green'
+                                : 'yellow'
+                            }
+                          >
+                            {user.role}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-4 font-mono text-2xs text-slate-600">
+                          {user.password ? (
+                            <span className="bg-slate-100 px-2 py-1 rounded text-slate-800 font-bold">
+                              {user.password}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">Tersimpan aman</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <Badge
+                            variant={
+                              user.status === 'aktif'
+                                ? 'green'
+                                : user.status === 'dibekukan'
+                                ? 'red'
+                                : 'gray'
+                            }
+                          >
+                            {user.status}
+                          </Badge>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenEditUser(user)}
+                              className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                              title="Ubah Akun"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              Ubah
+                            </button>
+                            {user.username !== 'admin' && (
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Hapus akun @${user.username}?`)) {
+                                    deleteUserAccount(user.id);
+                                  }
+                                }}
+                                className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                title="Hapus Akun"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -387,22 +481,37 @@ export const HakAksesView: React.FC = () => {
         isOpen={isUserModalOpen}
         onClose={() => setIsUserModalOpen(false)}
         title={editingUser ? 'Ubah Akun Pengguna' : 'Buat Akun Pengguna Baru'}
-        subtitle="Kelola username, peran, dan status akun"
+        subtitle="Kelola username, kata sandi, jabatan, peran, dan status akun"
         maxWidth="md"
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
-          <div>
-            <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Username *
-            </label>
-            <input
-              type="text"
-              required
-              value={userForm.username}
-              onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
-              placeholder="Contoh: guru_ahmad"
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                Username *
+              </label>
+              <input
+                type="text"
+                required
+                value={userForm.username}
+                onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                placeholder="Contoh: guru_ahmad"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                Kata Sandi (Password) *
+              </label>
+              <input
+                type="text"
+                required
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                placeholder="Password..."
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono font-bold"
+              />
+            </div>
           </div>
 
           <div>
@@ -419,6 +528,20 @@ export const HakAksesView: React.FC = () => {
             />
           </div>
 
+          <div>
+            <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Jabatan / Posisi *
+            </label>
+            <input
+              type="text"
+              required
+              value={userForm.position}
+              onChange={(e) => setUserForm({ ...userForm, position: e.target.value })}
+              placeholder="Contoh: Terapis Wicara / Kepala Lembaga / Wali Murid"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
@@ -427,7 +550,7 @@ export const HakAksesView: React.FC = () => {
               <select
                 value={userForm.role}
                 onChange={(e) => setUserForm({ ...userForm, role: e.target.value as UserRole })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden cursor-pointer"
+                className="w-full px-3 py-2 text-xs bg-purple-50 border border-purple-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-500 focus:outline-hidden cursor-pointer font-bold text-purple-900"
               >
                 <option value="guru">Guru</option>
                 <option value="kepala">Kepala</option>

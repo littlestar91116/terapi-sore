@@ -35,8 +35,10 @@ export interface UserProfile {
   status: AccountStatus;
   phone?: string;
   email?: string;
+  position?: string; // Jabatan (e.g. "Terapis Wicara", "Kepala Terapi", "Wali Murid")
   teacherId?: string; // Jika akun ini terikat ke data guru
   studentIds?: string[]; // Jika akun wali, list ID siswa anaknya
+  password?: string;
 }
 
 export interface Package {
@@ -60,6 +62,8 @@ export interface Teacher {
   salarySystem: SalarySystem;
   hourlyRate: number; // default 20.000
   monthlySalary: number; // e.g. 3.000.000
+  position?: string; // Pilihan jabatan (e.g. Guru Terapis, Terapis Wicara, Terapis Okupasi, Kepala Terapi, Admin)
+  role?: UserRole; // Peran hak akses akun ('guru' | 'kepala' | 'admin')
 }
 
 export interface Student {

@@ -12,6 +12,9 @@ import {
   Phone,
   Calendar,
   AlertCircle,
+  KeyRound,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -21,7 +24,8 @@ import { Modal } from '../common/Modal';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const SiswaView: React.FC = () => {
-  const { currentRole, hasPermission } = useAuth();
+  const { currentRole, hasPermission, users, syncStudentParentAccount, syncFreezeStudent } =
+    useAuth();
   const {
     students,
     teachers,
@@ -40,6 +44,18 @@ export const SiswaView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Auto Account Creation State
+  const [autoCreateAccount, setAutoCreateAccount] = useState(true);
+  const [parentUsername, setParentUsername] = useState('');
+  const [parentPassword, setParentPassword] = useState('123');
+  const [accountAlert, setAccountAlert] = useState<{
+    studentName: string;
+    parentName: string;
+    username: string;
+    password?: string;
+    isEdit: boolean;
+  } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -82,6 +98,9 @@ export const SiswaView: React.FC = () => {
       accountStatus: 'aktif',
       saldoJam: 0,
     });
+    setAutoCreateAccount(true);
+    setParentUsername('');
+    setParentPassword('123');
     setIsModalOpen(true);
   };
 
@@ -98,7 +117,31 @@ export const SiswaView: React.FC = () => {
       accountStatus: student.accountStatus === 'dibekukan' ? 'dibekukan' : 'aktif',
       saldoJam: student.saldoJam,
     });
+
+    const linkedUser = users.find(
+      (u) =>
+        (student.parentUserId && u.id === student.parentUserId) ||
+        u.studentIds?.includes(student.id) ||
+        (u.phone && student.parentPhone && u.phone === student.parentPhone) ||
+        (u.role === 'wali' && u.fullName.toLowerCase() === student.parentName.toLowerCase())
+    );
+
+    setAutoCreateAccount(true);
+    setParentUsername(linkedUser?.username || '');
+    setParentPassword(linkedUser?.password || '123');
     setIsModalOpen(true);
+  };
+
+  const handleParentNameChange = (val: string) => {
+    setFormData((prev) => ({ ...prev, parentName: val }));
+    // Jika menambah siswa baru dan belum mengisi custom username
+    if (!editingStudent) {
+      const clean = val
+        .toLowerCase()
+        .replace(/^(ibu|bapak|pak|bu)\s+/i, '')
+        .replace(/[^a-z0-9]/g, '');
+      setParentUsername(clean ? `wali_${clean}` : '');
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -106,19 +149,59 @@ export const SiswaView: React.FC = () => {
     if (!formData.name.trim() || !formData.parentName.trim()) return;
 
     if (editingStudent) {
-      updateStudent({
+      let updatedStudent: Student = {
         ...editingStudent,
         ...formData,
-      });
+      };
+
+      if (autoCreateAccount) {
+        const synced = syncStudentParentAccount(updatedStudent, {
+          username: parentUsername,
+          password: parentPassword,
+        });
+        updatedStudent.parentUserId = synced.id;
+        setAccountAlert({
+          studentName: updatedStudent.name,
+          parentName: updatedStudent.parentName,
+          username: synced.username,
+          password: parentPassword || '123',
+          isEdit: true,
+        });
+      }
+
+      updateStudent(updatedStudent);
     } else {
-      const newStudent: Student = {
-        id: `SIS-${Date.now().toString(36).toUpperCase()}`,
+      const newId = `SIS-${Date.now().toString(36).toUpperCase()}`;
+      let newStudent: Student = {
+        id: newId,
         ...formData,
         createdAt: new Date().toISOString().split('T')[0],
       };
+
+      if (autoCreateAccount) {
+        const synced = syncStudentParentAccount(newStudent, {
+          username: parentUsername,
+          password: parentPassword,
+        });
+        newStudent.parentUserId = synced.id;
+        setAccountAlert({
+          studentName: newStudent.name,
+          parentName: newStudent.parentName,
+          username: synced.username,
+          password: parentPassword || '123',
+          isEdit: false,
+        });
+      }
+
       addStudent(newStudent);
     }
     setIsModalOpen(false);
+  };
+
+  const handleToggleFreezeStudent = (student: Student) => {
+    const willFreeze = student.accountStatus !== 'dibekukan';
+    toggleStudentFreeze(student.id, willFreeze);
+    syncFreezeStudent(student.id, willFreeze);
   };
 
   // Filtered Students
@@ -155,6 +238,43 @@ export const SiswaView: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* Success Alert: Akun Otomatis Dibuat / Disinkronkan */}
+      {accountAlert && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-start justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl shrink-0 mt-0.5">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div className="text-xs text-emerald-950 space-y-1">
+              <h4 className="font-bold text-sm">
+                {accountAlert.isEdit
+                  ? 'Akun Wali Murid Berhasil Disinkronkan!'
+                  : 'Akun Wali Murid Berhasil Dibuat Otomatis!'}
+              </h4>
+              <p className="text-emerald-800">
+                Data ananda <strong>{accountAlert.studentName}</strong> tersimpan. Wali murid{' '}
+                <strong>{accountAlert.parentName}</strong> sekarang dapat langsung login dengan:
+              </p>
+              <div className="inline-flex items-center gap-3 bg-white px-3 py-1.5 rounded-lg border border-emerald-200 font-mono text-xs text-slate-800 mt-1">
+                <span>
+                  Username: <strong className="text-emerald-700">{accountAlert.username}</strong>
+                </span>
+                <span>•</span>
+                <span>
+                  Password: <strong className="text-emerald-700">{accountAlert.password || '123'}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setAccountAlert(null)}
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row gap-3">
@@ -246,6 +366,25 @@ export const SiswaView: React.FC = () => {
                           <Phone className="w-3 h-3 text-slate-400" />
                           <span>{student.parentPhone}</span>
                         </div>
+                        {(() => {
+                          const linked = users.find(
+                            (u) =>
+                              (student.parentUserId && u.id === student.parentUserId) ||
+                              u.studentIds?.includes(student.id) ||
+                              (u.phone && student.parentPhone && u.phone === student.parentPhone) ||
+                              (u.role === 'wali' &&
+                                u.fullName.toLowerCase() === student.parentName.toLowerCase())
+                          );
+                          if (!linked) return null;
+                          return (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center gap-1 text-3xs font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                <KeyRound className="w-2.5 h-2.5" />
+                                @{linked.username}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Paket Terapi */}
@@ -281,8 +420,8 @@ export const SiswaView: React.FC = () => {
                         <div className="inline-flex items-center gap-1.5">
                           {canManageFreeze && (
                             <button
-                              onClick={() => toggleStudentFreeze(student.id, !isFrozen)}
-                              title={isFrozen ? 'Aktifkan Akun' : 'Bekukan Akun'}
+                              onClick={() => handleToggleFreezeStudent(student)}
+                              title={isFrozen ? 'Aktifkan Akun Siswa & Wali' : 'Bekukan Akun Siswa & Wali'}
                               className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                                 isFrozen
                                   ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
@@ -373,7 +512,7 @@ export const SiswaView: React.FC = () => {
                 type="text"
                 required
                 value={formData.parentName}
-                onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
+                onChange={(e) => handleParentNameChange(e.target.value)}
                 placeholder="Contoh: Ibu Ratna Dewi"
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               />
@@ -392,6 +531,62 @@ export const SiswaView: React.FC = () => {
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               />
             </div>
+          </div>
+
+          {/* Section Pembuatan & Sinkronisasi Akun Wali Murid Otomatis */}
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-emerald-700" />
+                <span className="text-xs font-bold text-emerald-950">
+                  Akun Login Wali Murid (Otomatis)
+                </span>
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer text-2xs font-semibold text-emerald-900">
+                <input
+                  type="checkbox"
+                  checked={autoCreateAccount}
+                  onChange={(e) => setAutoCreateAccount(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>Otomatis Buat & Sinkron Akun</span>
+              </label>
+            </div>
+
+            {autoCreateAccount && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-3xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
+                    Username Wali Murid *
+                  </label>
+                  <input
+                    type="text"
+                    required={autoCreateAccount}
+                    value={parentUsername}
+                    onChange={(e) => setParentUsername(e.target.value)}
+                    placeholder="Contoh: wali_alif"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-3xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
+                    Kata Sandi / Password *
+                  </label>
+                  <input
+                    type="text"
+                    required={autoCreateAccount}
+                    value={parentPassword}
+                    onChange={(e) => setParentPassword(e.target.value)}
+                    placeholder="Password login..."
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium text-slate-900"
+                  />
+                </div>
+              </div>
+            )}
+            <p className="text-3xs text-emerald-700 leading-relaxed">
+              Akun login wali murid akan langsung otomatis terdaftar / tersinkronisasi. Wali murid
+              dapat langsung masuk ke sistem untuk melihat jadwal anak dan kwitansi.
+            </p>
           </div>
 
           <div>

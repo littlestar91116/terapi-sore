@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { UserRole } from '../../types';
 import { Badge } from '../common/Badge';
+import { APP_CONFIG } from '../../config/appConfig';
 
 interface NavbarProps {
   onOpenSupabaseGuide: () => void;
@@ -52,15 +53,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobil
           )}
 
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-xs">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-1 shadow-xs border border-slate-200/80 shrink-0">
+              <img
+                src={APP_CONFIG.logoUrl}
+                alt="Little Star Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-tight">
-                Sistem Terapi Siswa
+              <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-tight flex items-center gap-1.5">
+                <span>{APP_CONFIG.name}</span>
               </h1>
               <p className="text-2xs text-slate-500 hidden sm:block">
-                Absensi, Keuangan & Penggajian Guru
+                {currentUser?.position ? `${currentUser.position} • ` : ''}{APP_CONFIG.tagline}
               </p>
             </div>
           </div>

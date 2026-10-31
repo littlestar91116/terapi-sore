@@ -1,6 +1,6 @@
 {
-  "name": "Sistem Absensi & Keuangan Terapi Siswa",
-  "description": "Sistem terpadu manajemen absensi, jadwal sesi terapi, perizinan, saldo jam, pembayaran & cetak kwitansi, serta penggajian guru.",
+  "name": "Little Star Learning Center",
+  "description": "Sistem Informasi Absensi & Keuangan Terapi Siswa di Little Star Learning Center.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

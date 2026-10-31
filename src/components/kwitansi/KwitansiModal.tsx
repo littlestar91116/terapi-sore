@@ -3,6 +3,7 @@ import { Printer, Download, CheckCircle, FileText } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Payment, Student, Package } from '../../types';
 import { formatRupiah, terbilangRupiah } from '../../lib/numberToIndonesianWords';
+import { APP_CONFIG } from '../../config/appConfig';
 
 interface KwitansiModalProps {
   isOpen: boolean;
@@ -70,18 +71,22 @@ export const KwitansiModal: React.FC<KwitansiModalProps> = ({
           {/* Header Kop Kwitansi */}
           <div className="flex items-start justify-between border-b-2 border-slate-800 pb-5 mb-5">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-black text-xl shadow-xs">
-                KT
+              <div className="w-16 h-16 rounded-xl bg-white flex items-center justify-center p-1 border border-slate-200 shadow-xs shrink-0">
+                <img
+                  src={APP_CONFIG.logoUrl}
+                  alt="Little Star Logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                  KLINIK TERAPI SISWA CERIA
+                <h2 className="text-xl font-bold tracking-tight text-slate-900 uppercase">
+                  {APP_CONFIG.name}
                 </h2>
                 <p className="text-xs text-slate-600">
                   Layanan Terapi Wicara, Okupasi, dan Tumbuh Kembang Anak
                 </p>
                 <p className="text-2xs text-slate-500">
-                  Jl. Cempaka Putih Raya No. 45, Jakarta • Telp: (021) 7890-1234
+                  {APP_CONFIG.address} • Telp / WA: {APP_CONFIG.phone}
                 </p>
               </div>
             </div>

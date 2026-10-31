@@ -21,6 +21,7 @@ import { Badge } from '../common/Badge';
 import { NavTabId } from '../layout/Sidebar';
 import { KwitansiModal } from '../kwitansi/KwitansiModal';
 import { Payment, Student } from '../../types';
+import { APP_CONFIG } from '../../config/appConfig';
 
 interface DashboardViewProps {
   onNavigateTab: (tab: NavTabId) => void;
@@ -467,7 +468,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Dasbor Manajemen Terapi
+            Dasbor {APP_CONFIG.name}
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Ringkasan data siswa, keuangan SPP, jadwal sesi, dan status operasional lembaga.
