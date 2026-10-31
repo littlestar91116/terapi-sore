@@ -1,12 +1,13 @@
 -- ==============================================================================
--- SISTEM ABSENSI & KEUANGAN TERAPI SISWA
--- SQL Schema, Relasi, RLS Policies, dan Data Awal (Seed) untuk Supabase
+-- SISTEM ABSENSI & KEUANGAN TERAPI SISWA - LITTLE STAR LEARNING CENTER
+-- SQL Schema, Relasi, RLS Policies, dan Data Awal (Seed) untuk Supabase (PostgreSQL)
+-- Aman dijalankan berulang kali (Idempotent - Drop Policy If Exists)
 -- ==============================================================================
 
 -- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TIPE ENUM
+-- 2. TIPE ENUM (Aman jika sudah ada)
 DO $$ BEGIN
     CREATE TYPE user_role AS ENUM ('admin', 'kepala', 'guru', 'wali');
 EXCEPTION
@@ -55,12 +56,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     username TEXT UNIQUE NOT NULL,
     full_name TEXT NOT NULL,
     role user_role NOT NULL DEFAULT 'wali',
+    position TEXT,
     status account_status NOT NULL DEFAULT 'aktif',
     phone TEXT,
     email TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Pastikan kolom baru tersedia jika tabel sudah ada sebelumnya
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS position TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status account_status DEFAULT 'aktif';
 
 -- 4. TABEL PAKET TERAPI (MASTER DATA)
 CREATE TABLE IF NOT EXISTS public.packages (
@@ -79,6 +85,8 @@ CREATE TABLE IF NOT EXISTS public.teachers (
     id TEXT PRIMARY KEY DEFAULT ('GUR-' || substr(md5(random()::text), 1, 6)),
     user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
+    position TEXT,
+    role user_role DEFAULT 'guru',
     phone TEXT,
     address TEXT,
     join_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -89,6 +97,10 @@ CREATE TABLE IF NOT EXISTS public.teachers (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Pastikan kolom baru tersedia jika tabel sudah ada sebelumnya
+ALTER TABLE public.teachers ADD COLUMN IF NOT EXISTS position TEXT;
+ALTER TABLE public.teachers ADD COLUMN IF NOT EXISTS role user_role DEFAULT 'guru';
 
 -- 6. TABEL SISWA
 CREATE TABLE IF NOT EXISTS public.students (
@@ -256,55 +268,105 @@ RETURNS user_role AS $$
     SELECT role FROM public.profiles WHERE id = auth.uid();
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
+-- ------------------------------------------------------------------------------
 -- 1. PROFILES RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin & Kepala punya akses penuh ke profiles" ON public.profiles;
 CREATE POLICY "Admin & Kepala punya akses penuh ke profiles"
     ON public.profiles FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
+DROP POLICY IF EXISTS "User bisa melihat profil sendiri" ON public.profiles;
 CREATE POLICY "User bisa melihat profil sendiri"
     ON public.profiles FOR SELECT
     USING (id = auth.uid());
 
+-- ------------------------------------------------------------------------------
 -- 2. PACKAGES RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Semua role bisa melihat paket aktif" ON public.packages;
 CREATE POLICY "Semua role bisa melihat paket aktif"
     ON public.packages FOR SELECT
     USING (TRUE);
 
+DROP POLICY IF EXISTS "Admin & Kepala bisa mengelola paket" ON public.packages;
 CREATE POLICY "Admin & Kepala bisa mengelola paket"
     ON public.packages FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
+-- ------------------------------------------------------------------------------
 -- 3. TEACHERS RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Semua user terotentikasi bisa melihat data guru" ON public.teachers;
 CREATE POLICY "Semua user terotentikasi bisa melihat data guru"
     ON public.teachers FOR SELECT
     USING (TRUE);
 
+DROP POLICY IF EXISTS "Admin & Kepala mengelola guru" ON public.teachers;
 CREATE POLICY "Admin & Kepala mengelola guru"
     ON public.teachers FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
+-- ------------------------------------------------------------------------------
 -- 4. STUDENTS RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin, Kepala, dan Guru bisa melihat seluruh siswa" ON public.students;
 CREATE POLICY "Admin, Kepala, dan Guru bisa melihat seluruh siswa"
     ON public.students FOR SELECT
     USING (public.get_current_role() IN ('admin', 'kepala', 'guru'));
 
+DROP POLICY IF EXISTS "Wali murid hanya melihat siswa miliknya" ON public.students;
 CREATE POLICY "Wali murid hanya melihat siswa miliknya"
     ON public.students FOR SELECT
     USING (parent_user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Admin & Kepala mengelola siswa" ON public.students;
 CREATE POLICY "Admin & Kepala mengelola siswa"
     ON public.students FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
--- 5. THERAPY SESSIONS RLS
+-- ------------------------------------------------------------------------------
+-- 5. MONTHLY SCHEDULES RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin, Kepala, dan Guru melihat jadwal bulanan" ON public.monthly_schedules;
+CREATE POLICY "Admin, Kepala, dan Guru melihat jadwal bulanan"
+    ON public.monthly_schedules FOR SELECT
+    USING (public.get_current_role() IN ('admin', 'kepala', 'guru'));
+
+DROP POLICY IF EXISTS "Admin & Kepala mengelola jadwal bulanan" ON public.monthly_schedules;
+CREATE POLICY "Admin & Kepala mengelola jadwal bulanan"
+    ON public.monthly_schedules FOR ALL
+    USING (public.get_current_role() IN ('admin', 'kepala'));
+
+DROP POLICY IF EXISTS "Wali melihat jadwal bulanan anaknya" ON public.monthly_schedules;
+CREATE POLICY "Wali melihat jadwal bulanan anaknya"
+    ON public.monthly_schedules FOR SELECT
+    USING (
+        student_id IN (
+            SELECT id FROM public.students 
+            WHERE parent_user_id = auth.uid() AND account_status != 'dibekukan'
+        )
+    );
+
+-- ------------------------------------------------------------------------------
+-- 6. THERAPY SESSIONS RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin, Kepala, dan Guru melihat semua sesi terapi" ON public.therapy_sessions;
 CREATE POLICY "Admin, Kepala, dan Guru melihat semua sesi terapi"
     ON public.therapy_sessions FOR SELECT
     USING (public.get_current_role() IN ('admin', 'kepala', 'guru'));
 
+DROP POLICY IF EXISTS "Guru bisa memperbarui absensi sesi terapi" ON public.therapy_sessions;
 CREATE POLICY "Guru bisa memperbarui absensi sesi terapi"
     ON public.therapy_sessions FOR UPDATE
     USING (public.get_current_role() IN ('admin', 'kepala', 'guru'));
 
+DROP POLICY IF EXISTS "Admin & Kepala mengelola sesi terapi" ON public.therapy_sessions;
+CREATE POLICY "Admin & Kepala mengelola sesi terapi"
+    ON public.therapy_sessions FOR ALL
+    USING (public.get_current_role() IN ('admin', 'kepala'));
+
+DROP POLICY IF EXISTS "Wali hanya melihat sesi anaknya jika akun tidak dibekukan" ON public.therapy_sessions;
 CREATE POLICY "Wali hanya melihat sesi anaknya jika akun tidak dibekukan"
     ON public.therapy_sessions FOR SELECT
     USING (
@@ -314,7 +376,10 @@ CREATE POLICY "Wali hanya melihat sesi anaknya jika akun tidak dibekukan"
         )
     );
 
--- 6. STUDENT LEAVES RLS (Khusus paket 2 jam)
+-- ------------------------------------------------------------------------------
+-- 7. STUDENT LEAVES RLS (Khusus paket 2 jam)
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Wali bisa melihat dan mengajukan izin anaknya jika paket 2 jam" ON public.student_leaves;
 CREATE POLICY "Wali bisa melihat dan mengajukan izin anaknya jika paket 2 jam"
     ON public.student_leaves FOR INSERT
     WITH CHECK (
@@ -327,15 +392,63 @@ CREATE POLICY "Wali bisa melihat dan mengajukan izin anaknya jika paket 2 jam"
         )
     );
 
+DROP POLICY IF EXISTS "Wali bisa melihat status izin anaknya" ON public.student_leaves;
+CREATE POLICY "Wali bisa melihat status izin anaknya"
+    ON public.student_leaves FOR SELECT
+    USING (
+        student_id IN (
+            SELECT id FROM public.students WHERE parent_user_id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "Admin & Kepala mengelola izin siswa" ON public.student_leaves;
 CREATE POLICY "Admin & Kepala mengelola izin siswa"
     ON public.student_leaves FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
--- 7. PAYMENTS & RECEIPT RLS
+-- ------------------------------------------------------------------------------
+-- 8. TEACHER LEAVES RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin & Kepala mengelola izin guru" ON public.teacher_leaves;
+CREATE POLICY "Admin & Kepala mengelola izin guru"
+    ON public.teacher_leaves FOR ALL
+    USING (public.get_current_role() IN ('admin', 'kepala'));
+
+DROP POLICY IF EXISTS "Guru bisa melihat dan mengajukan izin sendiri" ON public.teacher_leaves;
+CREATE POLICY "Guru bisa melihat dan mengajukan izin sendiri"
+    ON public.teacher_leaves FOR ALL
+    USING (
+        teacher_id IN (
+            SELECT id FROM public.teachers WHERE user_id = auth.uid()
+        )
+    );
+
+-- ------------------------------------------------------------------------------
+-- 9. SALDO JAM HISTORY RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin & Kepala mengelola saldo jam" ON public.saldo_jam_history;
+CREATE POLICY "Admin & Kepala mengelola saldo jam"
+    ON public.saldo_jam_history FOR ALL
+    USING (public.get_current_role() IN ('admin', 'kepala'));
+
+DROP POLICY IF EXISTS "Wali bisa melihat riwayat saldo jam anaknya" ON public.saldo_jam_history;
+CREATE POLICY "Wali bisa melihat riwayat saldo jam anaknya"
+    ON public.saldo_jam_history FOR SELECT
+    USING (
+        student_id IN (
+            SELECT id FROM public.students WHERE parent_user_id = auth.uid()
+        )
+    );
+
+-- ------------------------------------------------------------------------------
+-- 10. PAYMENTS & RECEIPT RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin & Kepala mengelola pembayaran" ON public.payments;
 CREATE POLICY "Admin & Kepala mengelola pembayaran"
     ON public.payments FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
+DROP POLICY IF EXISTS "Wali bisa melihat riwayat pembayaran anaknya" ON public.payments;
 CREATE POLICY "Wali bisa melihat riwayat pembayaran anaknya"
     ON public.payments FOR SELECT
     USING (
@@ -344,11 +457,15 @@ CREATE POLICY "Wali bisa melihat riwayat pembayaran anaknya"
         )
     );
 
--- 8. PAYROLLS RLS
+-- ------------------------------------------------------------------------------
+-- 11. PAYROLLS RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin & Kepala mengelola payroll" ON public.payrolls;
 CREATE POLICY "Admin & Kepala mengelola payroll"
     ON public.payrolls FOR ALL
     USING (public.get_current_role() IN ('admin', 'kepala'));
 
+DROP POLICY IF EXISTS "Guru bisa melihat slip gaji miliknya sendiri" ON public.payrolls;
 CREATE POLICY "Guru bisa melihat slip gaji miliknya sendiri"
     ON public.payrolls FOR SELECT
     USING (
@@ -357,11 +474,28 @@ CREATE POLICY "Guru bisa melihat slip gaji miliknya sendiri"
         )
     );
 
--- 9. ROLE PERMISSIONS RLS (Khusus Admin)
+-- ------------------------------------------------------------------------------
+-- 12. FINANCIAL SETTINGS RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Admin & Kepala mengelola pengaturan keuangan" ON public.financial_settings;
+CREATE POLICY "Admin & Kepala mengelola pengaturan keuangan"
+    ON public.financial_settings FOR ALL
+    USING (public.get_current_role() IN ('admin', 'kepala'));
+
+DROP POLICY IF EXISTS "Semua role bisa melihat pengaturan keuangan" ON public.financial_settings;
+CREATE POLICY "Semua role bisa melihat pengaturan keuangan"
+    ON public.financial_settings FOR SELECT
+    USING (TRUE);
+
+-- ------------------------------------------------------------------------------
+-- 13. ROLE PERMISSIONS RLS (Khusus Admin)
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Hanya Admin yang bisa mengakses dan mengubah hak akses" ON public.role_permissions;
 CREATE POLICY "Hanya Admin yang bisa mengakses dan mengubah hak akses"
     ON public.role_permissions FOR ALL
     USING (public.get_current_role() = 'admin');
 
+DROP POLICY IF EXISTS "Semua role bisa membaca permissions untuk navigasi" ON public.role_permissions;
 CREATE POLICY "Semua role bisa membaca permissions untuk navigasi"
     ON public.role_permissions FOR SELECT
     USING (TRUE);
@@ -370,7 +504,7 @@ CREATE POLICY "Semua role bisa membaca permissions untuk navigasi"
 -- DATA AWAL (SEED DATA)
 -- ==============================================================================
 
--- Seed 10 Paket Terapi Resmi
+-- Seed 10 Paket Terapi Resmi Little Star Learning Center
 INSERT INTO public.packages (id, name, duration_hours, frequency_per_week, price_monthly, description)
 VALUES
     ('PKT-1-1', 'Paket 1 Jam (1x / minggu)', 1, 1, 250000, 'Sesi terapi 1 jam, 1 kali pertemuan per minggu'),
@@ -385,12 +519,18 @@ VALUES
     ('PKT-2-5', 'Paket 2 Jam (5x / minggu)', 2, 5, 2000000, 'Sesi intensif 2 jam, 5 kali pertemuan per minggu (Bisa izin)')
 ON CONFLICT (id) DO UPDATE SET 
     price_monthly = EXCLUDED.price_monthly,
-    name = EXCLUDED.name;
+    name = EXCLUDED.name,
+    duration_hours = EXCLUDED.duration_hours,
+    frequency_per_week = EXCLUDED.frequency_per_week,
+    description = EXCLUDED.description;
 
 -- Seed Pengaturan Keuangan Default
 INSERT INTO public.financial_settings (id, default_hourly_rate, full_attendance_bonus, daily_leave_deduction)
 VALUES (1, 20000, 50000, 75000)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    default_hourly_rate = EXCLUDED.default_hourly_rate,
+    full_attendance_bonus = EXCLUDED.full_attendance_bonus,
+    daily_leave_deduction = EXCLUDED.daily_leave_deduction;
 
 -- Seed Matriks Hak Akses Default
 INSERT INTO public.role_permissions (id, role, module, can_view, can_add, can_edit, can_delete) VALUES
@@ -452,21 +592,36 @@ ON CONFLICT (id) DO UPDATE SET
     can_delete = EXCLUDED.can_delete;
 
 -- Seed Profil Pengguna Awal
-INSERT INTO public.profiles (id, username, full_name, role, status, phone, email) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'admin', 'Administrator Utama', 'admin', 'aktif', '081234567890', 'admin@terapi.id'),
-    ('00000000-0000-0000-0000-000000000002', 'kepala', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'aktif', '081234567891', 'kepala@terapi.id'),
-    ('00000000-0000-0000-0000-000000000003', 'guru1', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'aktif', '081234567892', 'siti@terapi.id'),
-    ('00000000-0000-0000-0000-000000000004', 'guru2', 'Budi Santoso, S.Pd', 'guru', 'aktif', '081234567893', 'budi@terapi.id'),
-    ('00000000-0000-0000-0000-000000000005', 'wali1', 'Ibu Ratna Dewi', 'wali', 'aktif', '081298765432', 'ratna@gmail.com'),
-    ('00000000-0000-0000-0000-000000000006', 'wali2', 'Bapak Hendra Gunawan', 'wali', 'dibekukan', '081298765433', 'hendra@gmail.com')
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.profiles (id, username, full_name, role, position, status, phone, email) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'admin', 'Administrator Utama', 'admin', 'Administrator Lembaga', 'aktif', '081234567890', 'admin@littlestar.id'),
+    ('00000000-0000-0000-0000-000000000002', 'kepala', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'Kepala Lembaga', 'aktif', '081234567891', 'kepala@littlestar.id'),
+    ('00000000-0000-0000-0000-000000000003', 'guru1', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'Terapis Wicara', 'aktif', '081234567892', 'siti@littlestar.id'),
+    ('00000000-0000-0000-0000-000000000004', 'guru2', 'Budi Santoso, S.Pd', 'guru', 'Terapis Okupasi', 'aktif', '081234567893', 'budi@littlestar.id'),
+    ('00000000-0000-0000-0000-000000000005', 'wali1', 'Ibu Ratna Dewi', 'wali', 'Wali Murid', 'aktif', '081298765432', 'ratna@gmail.com'),
+    ('00000000-0000-0000-0000-000000000006', 'wali2', 'Bapak Hendra Gunawan', 'wali', 'Wali Murid', 'dibekukan', '081298765433', 'hendra@gmail.com')
+ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role,
+    position = EXCLUDED.position,
+    status = EXCLUDED.status,
+    phone = EXCLUDED.phone,
+    email = EXCLUDED.email;
 
 -- Seed Guru Awal
-INSERT INTO public.teachers (id, user_id, name, phone, address, join_date, status, salary_system, hourly_rate, monthly_salary) VALUES
-    ('GUR-001', '00000000-0000-0000-0000-000000000003', 'Siti Rahmawati, S.Tr.Kes', '081234567892', 'Jl. Melati No. 14, Jakarta Selatan', '2023-01-15', 'aktif', 'per_jam', 20000, 0),
-    ('GUR-002', '00000000-0000-0000-0000-000000000004', 'Budi Santoso, S.Pd', '081234567893', 'Jl. Anggrek No. 8, Tangerang Selatan', '2023-03-01', 'aktif', 'bulanan', 0, 3200000),
-    ('GUR-003', NULL, 'Dewi Lestari, S.Psi', '081234567894', 'Jl. Flamboyan No. 20, Depok', '2023-06-10', 'aktif', 'per_jam', 20000, 0)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.teachers (id, user_id, name, position, role, phone, address, join_date, status, salary_system, hourly_rate, monthly_salary) VALUES
+    ('GUR-001', '00000000-0000-0000-0000-000000000003', 'Siti Rahmawati, S.Tr.Kes', 'Terapis Wicara', 'guru', '081234567892', 'Jl. Melati No. 14, Jakarta Selatan', '2023-01-15', 'aktif', 'per_jam', 20000, 0),
+    ('GUR-002', '00000000-0000-0000-0000-000000000004', 'Budi Santoso, S.Pd', 'Terapis Okupasi', 'guru', '081234567893', 'Jl. Anggrek No. 8, Tangerang Selatan', '2023-03-01', 'aktif', 'bulanan', 0, 3200000),
+    ('GUR-003', NULL, 'Dewi Lestari, S.Psi', 'Terapis Sensori Integrasi', 'guru', '081234567894', 'Jl. Flamboyan No. 20, Depok', '2023-06-10', 'aktif', 'per_jam', 20000, 0)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    position = EXCLUDED.position,
+    role = EXCLUDED.role,
+    phone = EXCLUDED.phone,
+    address = EXCLUDED.address,
+    status = EXCLUDED.status,
+    salary_system = EXCLUDED.salary_system,
+    hourly_rate = EXCLUDED.hourly_rate,
+    monthly_salary = EXCLUDED.monthly_salary;
 
 -- Seed Siswa Awal
 INSERT INTO public.students (id, name, birth_date, parent_name, parent_phone, parent_user_id, address, package_id, teacher_id, account_status, saldo_jam) VALUES
@@ -474,4 +629,13 @@ INSERT INTO public.students (id, name, birth_date, parent_name, parent_phone, pa
     ('SIS-002', 'Nadhira Kirana', '2020-02-18', 'Bapak Surya Pranoto', '081387654321', NULL, 'Jl. Cempaka Baru No. 12, Jakarta', 'PKT-1-2', 'GUR-001', 'aktif', 0),
     ('SIS-003', 'Kenzo Pratama', '2018-11-25', 'Bapak Hendra Gunawan', '081298765433', '00000000-0000-0000-0000-000000000006', 'Jl. Pinus No. 5, Jakarta Barat', 'PKT-1-3', 'GUR-002', 'dibekukan', 0),
     ('SIS-004', 'Aisyah Putri', '2019-09-08', 'Ibu Ratna Dewi', '081298765432', '00000000-0000-0000-0000-000000000005', 'Jl. Mawar Indah Blok B3, Jakarta', 'PKT-2-2', 'GUR-002', 'aktif', 1)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    birth_date = EXCLUDED.birth_date,
+    parent_name = EXCLUDED.parent_name,
+    parent_phone = EXCLUDED.parent_phone,
+    address = EXCLUDED.address,
+    package_id = EXCLUDED.package_id,
+    teacher_id = EXCLUDED.teacher_id,
+    account_status = EXCLUDED.account_status,
+    saldo_jam = EXCLUDED.saldo_jam;
