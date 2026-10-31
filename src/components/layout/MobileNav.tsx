@@ -20,7 +20,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   onSelectTab,
 }) => {
   const { currentRole, currentUser, hasPermission } = useAuth();
-  const { students } = useData();
+  const { students, packages } = useData();
 
   const myStudents = currentRole === 'wali'
     ? students.filter(
@@ -31,6 +31,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       )
     : students;
   const hasHolidayCompensation = myStudents.some((s) => s.saldoJam > 0);
+  const has2HourPackage = myStudents.some((s) => {
+    const pkg = packages.find((p) => p.id === s.packageId);
+    return pkg?.durationHours === 2;
+  });
 
   const menuItems: {
     id: NavTabId;
@@ -42,20 +46,25 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     { id: 'siswa', label: 'Data Siswa', module: 'siswa' },
     { id: 'guru', label: 'Data Guru & Tarif', module: 'guru' },
     { id: 'paket', label: 'Paket Terapi', module: 'paket' },
-    { id: 'jadwal', label: 'Jadwal Bulanan', module: 'jadwal' },
+    { id: 'jadwal', label: currentRole === 'wali' ? 'Jadwal Terapi Anak' : 'Jadwal Bulanan', module: 'jadwal' },
     { id: 'absensi', label: 'Absensi Siswa', module: 'absensi' },
     { id: 'izin', label: 'Sistem Izin (Paket 2 Jam)', module: 'izin_siswa' },
     { id: 'saldo_jam', label: 'Saldo Jam Terapi', module: 'saldo_jam' },
-    { id: 'pembayaran', label: 'Pembayaran & Kwitansi', module: 'pembayaran' },
+    { id: 'pembayaran', label: currentRole === 'wali' ? 'Pemberitahuan Tagihan SPP' : 'Pembayaran & Kwitansi', module: 'pembayaran' },
     { id: 'gaji', label: 'Gaji Guru Bulanan', module: 'gaji' },
     { id: 'hak_akses', label: 'Pengaturan Hak Akses (Admin)', adminOnly: true },
   ];
 
   const visibleItems = menuItems.filter((item) => {
-    if (item.adminOnly) return currentRole === 'admin';
-    if (item.id === 'saldo_jam' && currentRole === 'wali' && !hasHolidayCompensation) {
-      return false;
+    // Khusus wali murid: hanya tampilkan menu yang relevan
+    if (currentRole === 'wali') {
+      const allowedWali: NavTabId[] = ['dashboard', 'jadwal', 'pembayaran'];
+      if (has2HourPackage) allowedWali.push('izin');
+      if (hasHolidayCompensation) allowedWali.push('saldo_jam');
+      return allowedWali.includes(item.id);
     }
+
+    if (item.adminOnly) return currentRole === 'admin';
     if (item.module) return hasPermission(item.module, 'view');
     return true;
   });

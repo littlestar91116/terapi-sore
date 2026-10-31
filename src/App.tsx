@@ -107,15 +107,17 @@ const AppContent: React.FC = () => {
           <span>Jadwal</span>
         </button>
 
-        <button
-          onClick={() => setCurrentTab('absensi')}
-          className={`flex flex-col items-center gap-1 text-3xs font-semibold py-1 px-2 rounded-xl transition-colors ${
-            currentTab === 'absensi' ? 'text-emerald-600 font-bold' : 'text-slate-500'
-          }`}
-        >
-          <ClipboardCheck className="w-4 h-4" />
-          <span>Absensi</span>
-        </button>
+        {!isWali && (
+          <button
+            onClick={() => setCurrentTab('absensi')}
+            className={`flex flex-col items-center gap-1 text-3xs font-semibold py-1 px-2 rounded-xl transition-colors ${
+              currentTab === 'absensi' ? 'text-emerald-600 font-bold' : 'text-slate-500'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            <span>Absensi</span>
+          </button>
+        )}
 
         <button
           onClick={() => setCurrentTab('pembayaran')}

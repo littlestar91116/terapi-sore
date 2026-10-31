@@ -514,9 +514,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       daysConfig: scheduleData.daysConfig,
     });
 
+    // Filter keluar sesi lama milik siswa ini di bulan ini agar tidak bentrok dengan diri sendiri saat edit
+    const otherSessions = sessions.filter(
+      (s) => !(s.studentId === scheduleData.studentId && s.sessionDate.startsWith(scheduleData.monthYear))
+    );
+
     // Cek bentrok dengan sesi yang sudah ada pada guru yang sama
     for (const session of generated) {
-      const clash = checkScheduleClash(sessions, {
+      const clash = checkScheduleClash(otherSessions, {
         teacherId: session.teacherId,
         sessionDate: session.sessionDate,
         startTime: session.startTime,
@@ -537,8 +542,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `SES-${Date.now().toString(36).toUpperCase()}-${index + 1}`,
     }));
 
-    setSchedules((prev) => [...prev, newSchedule]);
-    setSessions((prev) => [...prev, ...newSessionsWithIds]);
+    setSchedules((prev) => [
+      ...prev.filter(
+        (sc) => !(sc.studentId === scheduleData.studentId && sc.monthYear === scheduleData.monthYear)
+      ),
+      newSchedule,
+    ]);
+    setSessions((prev) => [
+      ...otherSessions,
+      ...newSessionsWithIds,
+    ]);
 
     // Kirim langsung otomatis ke Supabase
     syncScheduleToSupabase(newSchedule);

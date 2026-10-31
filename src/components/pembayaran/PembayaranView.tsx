@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import {
   Receipt,
-  CheckCircle,
-  XCircle,
+  CheckCircle2,
+  AlertTriangle,
   Search,
   Filter,
   Printer,
   Lock,
   Unlock,
-  AlertTriangle,
   CreditCard,
   Banknote,
+  Building2,
+  PhoneCall,
+  Clock,
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -49,21 +51,24 @@ export const PembayaranView: React.FC = () => {
 
   const canManagePayment = currentRole === 'admin' || currentRole === 'kepala';
 
-  // Filter tagihan
+  // Daftar siswa milik wali saat login
+  const myStudents = currentRole === 'wali'
+    ? students.filter(
+        (s) =>
+          s.parentUserId === currentUser?.id ||
+          currentUser?.studentIds?.includes(s.id) ||
+          s.parentName === currentUser?.fullName
+      )
+    : students;
+  const myStudentIds = new Set(myStudents.map((s) => s.id));
+
+  // Saring pembayaran untuk bulan aktif
   const monthPayments = payments.filter((p) => p.monthYear === activeMonth);
 
-  // Jika wali murid, hanya tampilkan anak miliknya
-  const displayedPayments =
-    currentRole === 'wali'
-      ? monthPayments.filter((p) => {
-          const student = students.find((s) => s.id === p.studentId);
-          return (
-            student?.parentUserId === currentUser?.id ||
-            currentUser?.studentIds?.includes(student?.id || '') ||
-            student?.parentName === currentUser?.fullName
-          );
-        })
-      : monthPayments;
+  // Jika wali murid, tampilkan pembayaran khusus anaknya saja
+  const displayedPayments = currentRole === 'wali'
+    ? monthPayments.filter((p) => myStudentIds.has(p.studentId))
+    : monthPayments;
 
   const filteredPayments = displayedPayments.filter((p) => {
     const student = students.find((s) => s.id === p.studentId);
@@ -104,6 +109,173 @@ export const PembayaranView: React.FC = () => {
     setMarkingPayment(null);
   };
 
+  // =========================================================================
+  // TAMPILAN KHUSUS WALI MURID: PEMBERITAHUAN PEMBAYARAN & KWITANSI
+  // =========================================================================
+  if (currentRole === 'wali') {
+    return (
+      <div className="space-y-6">
+        {/* Header Wali */}
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Pemberitahuan Tagihan SPP Terapi
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Informasi status pembayaran SPP bulanan ananda, panduan pembayaran, dan unduh kwitansi resmi.
+          </p>
+        </div>
+
+        {/* Kartu Pemberitahuan Pembayaran per Anak untuk Bulan Aktif */}
+        <div className="space-y-4">
+          {myStudents.map((student) => {
+            const currentBill = payments.find(
+              (p) => p.studentId === student.id && p.monthYear === activeMonth
+            );
+            const pkg = packages.find((p) => p.id === student.packageId);
+            const isPaid = currentBill?.status === 'lunas';
+            const amount = currentBill?.amount || pkg?.priceMonthly || 0;
+
+            return (
+              <div
+                key={student.id}
+                className={`p-6 rounded-3xl border transition-all shadow-xs ${
+                  isPaid
+                    ? 'bg-emerald-50/60 border-emerald-200'
+                    : 'bg-amber-50/70 border-amber-200/90'
+                }`}
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isPaid ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                      }`}
+                    >
+                      {isPaid ? <CheckCircle2 className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-500">
+                          Tagihan Periode {activeMonth}
+                        </span>
+                        <Badge variant={isPaid ? 'green' : 'red'}>
+                          {isPaid ? 'Lunas' : 'Menunggu Pembayaran'}
+                        </Badge>
+                      </div>
+
+                      <h3 className="text-lg font-bold text-slate-900">
+                        {student.name} — {pkg?.name}
+                      </h3>
+
+                      <div className="flex items-baseline gap-2 pt-1">
+                        <span className="text-2xl font-black text-slate-900">
+                          {formatRupiah(amount)}
+                        </span>
+                        <span className="text-xs text-slate-500">/ bulan</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Aksi Kwitansi */}
+                  <div className="self-start md:self-auto">
+                    {isPaid && currentBill ? (
+                      <button
+                        onClick={() => setViewingKwitansi({ payment: currentBill, student })}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Cetak Kwitansi Resmi</span>
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100/90 text-amber-900 rounded-xl text-xs font-semibold">
+                        <Clock className="w-3.5 h-3.5" />
+                        Jatuh tempo tgl 10 tiap bulan
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Detail Transaksi atau Panduan Pembayaran */}
+                {isPaid && currentBill ? (
+                  <div className="mt-4 pt-4 border-t border-emerald-200/80 flex flex-wrap items-center gap-4 text-xs text-emerald-950">
+                    <div>
+                      Tanggal Pembayaran: <strong>{currentBill.paymentDate}</strong>
+                    </div>
+                    <div>•</div>
+                    <div>
+                      Metode: <strong>{currentBill.paymentMethod || 'Tunai'}</strong>
+                    </div>
+                    <div>•</div>
+                    <div>
+                      No. Kwitansi: <strong>{currentBill.receiptNumber}</strong>
+                    </div>
+                    {currentBill.notes && (
+                      <>
+                        <div>•</div>
+                        <div className="italic text-slate-600">Catatan: {currentBill.notes}</div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-4 pt-4 border-t border-amber-200/80 space-y-2.5">
+                    <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-amber-700" />
+                      Petunjuk Pembayaran (Offline / Transfer Resmi Lembaga):
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-amber-950">
+                      <div className="p-3 bg-white/80 rounded-xl border border-amber-300/80">
+                        <span className="font-bold text-slate-900 block mb-0.5">
+                          1. Pembayaran Tunai (Cash)
+                        </span>
+                        <p className="text-2xs text-slate-600 leading-relaxed">
+                          Dapat dibayarkan langsung di bagian administrasi/kasir Little Star Learning Center pada jam operasional (13.00 - 17.00 WIB).
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-white/80 rounded-xl border border-amber-300/80">
+                        <span className="font-bold text-slate-900 block mb-0.5">
+                          2. Transfer Bank (Non-tunai)
+                        </span>
+                        <p className="text-2xs text-slate-600 leading-relaxed font-mono">
+                          BCA: <strong>8830-192-881</strong> a/n Little Star Learning Center
+                          <br />
+                          Mandiri: <strong>137-00-9821-221</strong> a/n Little Star Learning Center
+                        </p>
+                        <p className="text-3xs text-slate-500 mt-1">
+                          Kirim bukti transfer ke WhatsApp Admin: <strong>0812-9876-5432</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-3xs text-amber-800 italic">
+                      * Pembayaran yang telah dikonfirmasi petugas akan otomatis terbit kwitansi resminya di halaman ini.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Modal Kwitansi */}
+        {viewingKwitansi && (
+          <KwitansiModal
+            isOpen={Boolean(viewingKwitansi)}
+            onClose={() => setViewingKwitansi(null)}
+            payment={viewingKwitansi.payment}
+            student={viewingKwitansi.student}
+            pkg={packages.find((p) => p.id === viewingKwitansi.student.packageId) || null}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // TAMPILAN ADMIN & KEPALA SEKOLAH: MANAJEMEN PEMBAYARAN LENGKAP
+  // =========================================================================
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -222,30 +394,35 @@ export const PembayaranView: React.FC = () => {
                     <tr
                       key={payment.id}
                       className={`hover:bg-slate-50/60 transition-colors ${
-                        isFrozen ? 'bg-rose-50/20' : ''
+                        isFrozen ? 'bg-rose-50/30' : ''
                       }`}
                     >
                       {/* Siswa & Wali */}
                       <td className="px-5 py-4">
-                        <div className="font-bold text-slate-900">{student?.name}</div>
+                        <div className="font-bold text-slate-900 flex items-center gap-2">
+                          <span>{student?.name || 'Siswa tidak ditemukan'}</span>
+                          {isFrozen && (
+                            <span className="text-3xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold">
+                              Akun Beku
+                            </span>
+                          )}
+                        </div>
                         <div className="text-2xs text-slate-500 mt-0.5">
-                          Wali: {student?.parentName} ({student?.parentPhone})
+                          Wali: {student?.parentName} • {student?.parentPhone}
                         </div>
                       </td>
 
                       {/* Paket */}
                       <td className="px-4 py-4">
                         <div className="font-semibold text-slate-800">{pkg?.name}</div>
-                        <span className="text-2xs text-slate-400">
-                          {pkg?.durationHours} Jam • {pkg?.frequencyPerWeek}x / minggu
-                        </span>
+                        <div className="text-2xs text-slate-400 mt-0.5">
+                          {pkg?.durationHours} Jam • {pkg?.frequencyPerWeek}x/minggu
+                        </div>
                       </td>
 
                       {/* Nominal */}
-                      <td className="px-4 py-4">
-                        <span className="font-black text-sm text-slate-900">
-                          {formatRupiah(payment.amount)}
-                        </span>
+                      <td className="px-4 py-4 font-bold text-slate-900">
+                        {formatRupiah(payment.amount)}
                       </td>
 
                       {/* Status */}
@@ -386,14 +563,14 @@ export const PembayaranView: React.FC = () => {
                   className="text-emerald-600"
                 />
                 <CreditCard className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs">Non-tunai (Transfer/QRIS)</span>
+                <span className="text-xs">Non-tunai (Transfer / QRIS)</span>
               </label>
             </div>
           </div>
 
           <div>
             <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Keterangan / Nomor Referensi (Opsional)
+              Catatan Pembayaran (Opsional)
             </label>
             <input
               type="text"

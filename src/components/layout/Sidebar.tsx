@@ -38,7 +38,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => {
   const { currentRole, currentUser, hasPermission } = useAuth();
-  const { students } = useData();
+  const { students, packages } = useData();
 
   const myStudents = currentRole === 'wali'
     ? students.filter(
@@ -127,15 +127,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
     },
   ];
 
+
+  const has2HourPackage = myStudents.some((s) => {
+    const pkg = packages.find((p) => p.id === s.packageId);
+    return pkg?.durationHours === 2;
+  });
+
   // Filter menu yang diizinkan untuk role saat ini
   const visibleItems = menuItems.filter((item) => {
+    // Khusus wali murid: hanya tampilkan menu yang relevan untuk wali murid
+    if (currentRole === 'wali') {
+      const allowedWali: NavTabId[] = ['dashboard', 'jadwal', 'pembayaran'];
+      if (has2HourPackage) allowedWali.push('izin');
+      if (hasHolidayCompensation) allowedWali.push('saldo_jam');
+      return allowedWali.includes(item.id);
+    }
+
     // Menu khusus admin hanya untuk admin
     if (item.adminOnly) {
       return currentRole === 'admin';
-    }
-    // Khusus wali murid: menu saldo jam HANYA muncul ketika ada sesi yang diliburkan oleh sekolah
-    if (item.id === 'saldo_jam' && currentRole === 'wali' && !hasHolidayCompensation) {
-      return false;
     }
     // Jika ada mapping modul, cek permission
     if (item.module) {

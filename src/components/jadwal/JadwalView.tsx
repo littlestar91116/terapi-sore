@@ -50,7 +50,7 @@ export const JadwalView: React.FC = () => {
   const [selectedDaysConfig, setSelectedDaysConfig] = useState<ScheduleDaySlot[]>([]);
 
   const canManageSchedule =
-    currentRole === 'admin' || currentRole === 'kepala' || currentRole === 'wali';
+    currentRole === 'admin' || currentRole === 'kepala';
 
   // Daftar siswa yang relevan (jika wali, hanya anak miliknya sendiri)
   const myStudents = currentRole === 'wali'
@@ -229,6 +229,18 @@ export const JadwalView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {currentRole === 'wali' && (
+        <div className="p-4 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl flex items-center gap-3 text-xs text-emerald-950 shadow-2xs">
+          <CalendarDays className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div>
+            <p className="font-bold">Informasi Jadwal Terapi Ananda</p>
+            <p className="text-2xs text-emerald-800/90 mt-0.5">
+              Jadwal sesi terapi ditentukan dan diinput langsung oleh Kepala Lembaga & Admin saat pendaftaran siswa. Wali murid dapat memantau tanggal, jam, durasi, dan status kehadiran ananda di bawah ini.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-wrap items-center gap-3">
