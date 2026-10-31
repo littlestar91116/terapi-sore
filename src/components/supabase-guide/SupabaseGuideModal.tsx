@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Database, Copy, Check, ExternalLink, ShieldCheck, RefreshCw, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Database, Copy, Check, ExternalLink, ShieldCheck, RefreshCw, KeyRound, CheckCircle2, UploadCloud, AlertCircle } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
 import { getStoredSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
 
 interface SupabaseGuideModalProps {
   isOpen: boolean;
@@ -10,9 +12,14 @@ interface SupabaseGuideModalProps {
 }
 
 export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, onClose }) => {
+  const { users } = useAuth();
+  const { syncAllToSupabase } = useData();
+
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; profileCount?: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string; details?: string } | null>(null);
 
   const initialConfig = getStoredSupabaseConfig();
   const [supabaseUrl, setSupabaseUrl] = useState(initialConfig.url);
@@ -39,6 +46,28 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
     const result = await testSupabaseConnection();
     setTestResult(result);
     setTesting(false);
+  };
+
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await syncAllToSupabase(users);
+      setSyncResult({
+        success: res.success,
+        message: res.details,
+        details: res.errors.length > 0 ? res.errors.slice(0, 3).join('; ') : undefined,
+      });
+      // Refresh status dan jumlah akun di Supabase
+      const check = await testSupabaseConnection();
+      setTestResult(check);
+    } catch (e: any) {
+      setSyncResult({
+        success: false,
+        message: `Gagal sinkronisasi: ${e?.message || e}`,
+      });
+    }
+    setSyncing(false);
   };
 
   const handleSaveConfig = (e: React.FormEvent) => {
@@ -111,6 +140,50 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
             }`}
           >
             {testResult.message}
+          </div>
+        )}
+
+        {/* Tombol Sinkronisasi Seluruh Data Lokal ke Supabase */}
+        {isConfigured && (
+          <div className="p-4 bg-emerald-50/60 border border-emerald-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                <UploadCloud className="w-4 h-4 text-emerald-600" />
+                Unggah & Sinkronkan Seluruh Data Lokal ke Supabase
+              </h4>
+              <p className="text-2xs text-emerald-800/80 mt-1">
+                Kirim seluruh akun pengguna ({users.length} akun), data siswa, data guru, paket, dan jadwal ke tabel Supabase Anda.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSyncAll}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+            >
+              <UploadCloud className={`w-3.5 h-3.5 ${syncing ? 'animate-bounce' : ''}`} />
+              {syncing ? 'Menyinkronkan...' : 'Sinkronkan Data Sekarang'}
+            </button>
+          </div>
+        )}
+
+        {syncResult && (
+          <div
+            className={`p-3.5 rounded-xl text-xs font-medium border flex items-start gap-2 ${
+              syncResult.success
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border-rose-200'
+            }`}
+          >
+            {syncResult.success ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <p className="font-semibold">{syncResult.message}</p>
+              {syncResult.details && <p className="text-2xs opacity-80 mt-1">{syncResult.details}</p>}
+            </div>
           </div>
         )}
 

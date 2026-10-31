@@ -30,6 +30,21 @@ import {
   CURRENT_MONTH,
 } from '../data/seedData';
 import { generateSessionsForMonth, checkScheduleClash } from '../lib/scheduleHelpers';
+import {
+  syncStudentToSupabase,
+  deleteStudentFromSupabase,
+  fetchStudentsFromSupabase,
+  syncTeacherToSupabase,
+  deleteTeacherFromSupabase,
+  fetchTeachersFromSupabase,
+  syncScheduleToSupabase,
+  syncSessionToSupabase,
+  syncPaymentToSupabase,
+  syncStudentLeaveToSupabase,
+  syncTeacherLeaveToSupabase,
+  syncSaldoHistoryToSupabase,
+  pushAllLocalDataToSupabase,
+} from '../lib/supabaseSync';
 
 interface DataContextType {
   // Master Packages
@@ -117,6 +132,14 @@ interface DataContextType {
   // Active filter month
   activeMonth: string;
   setActiveMonth: (month: string) => void;
+
+  // Supabase Sync Action
+  syncAllToSupabase: (usersList: any[]) => Promise<{
+    success: boolean;
+    totalSynced: number;
+    details: string;
+    errors: string[];
+  }>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -208,6 +231,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(LS_PREFIX + 'financial_settings', JSON.stringify(financialSettings));
   }, [financialSettings]);
 
+  // Muat data dari Supabase saat aplikasi dibuka jika Supabase terhubung
+  useEffect(() => {
+    fetchStudentsFromSupabase().then((remote) => {
+      if (remote && remote.length > 0) {
+        setStudents((prev) => {
+          const merged = [...prev];
+          for (const r of remote) {
+            const idx = merged.findIndex((m) => m.id === r.id);
+            if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+            else merged.push(r);
+          }
+          return merged;
+        });
+      }
+    });
+
+    fetchTeachersFromSupabase().then((remote) => {
+      if (remote && remote.length > 0) {
+        setTeachers((prev) => {
+          const merged = [...prev];
+          for (const r of remote) {
+            const idx = merged.findIndex((m) => m.id === r.id);
+            if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+            else merged.push(r);
+          }
+          return merged;
+        });
+      }
+    });
+  }, []);
+
   // Packages CRUD
   const updatePackage = (pkg: Package) => {
     setPackages((prev) => prev.map((p) => (p.id === pkg.id ? pkg : p)));
@@ -220,19 +274,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Teachers CRUD
   const addTeacher = (teacher: Teacher) => {
     setTeachers((prev) => [...prev, teacher]);
+    syncTeacherToSupabase(teacher);
   };
 
   const updateTeacher = (teacher: Teacher) => {
     setTeachers((prev) => prev.map((t) => (t.id === teacher.id ? teacher : t)));
+    syncTeacherToSupabase(teacher);
   };
 
   const deleteTeacher = (id: string) => {
     setTeachers((prev) => prev.filter((t) => t.id !== id));
+    deleteTeacherFromSupabase(id);
   };
 
   // Students CRUD & Freeze
   const addStudent = (student: Student) => {
     setStudents((prev) => [...prev, student]);
+    syncStudentToSupabase(student);
+
     // Buat juga billing bulan ini otomatis jika belum ada
     const targetPkg = packages.find((p) => p.id === student.packageId);
     if (targetPkg) {
@@ -245,11 +304,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       };
       setPayments((prev) => [...prev, newPayment]);
+      syncPaymentToSupabase(newPayment);
     }
   };
 
   const updateStudent = (student: Student) => {
     setStudents((prev) => prev.map((s) => (s.id === student.id ? student : s)));
+    syncStudentToSupabase(student);
   };
 
   const deleteStudent = (id: string) => {
@@ -257,11 +318,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSessions((prev) => prev.filter((s) => s.studentId !== id));
     setSchedules((prev) => prev.filter((s) => s.studentId !== id));
     setPayments((prev) => prev.filter((p) => p.studentId !== id));
+    deleteStudentFromSupabase(id);
   };
 
   const toggleStudentFreeze = (id: string, freeze: boolean) => {
     setStudents((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, accountStatus: freeze ? 'dibekukan' : 'aktif' } : s))
+      prev.map((s) => {
+        if (s.id === id) {
+          const newStatus = freeze ? 'dibekukan' : 'aktif';
+          const updated: Student = { ...s, accountStatus: newStatus };
+          syncStudentToSupabase(updated);
+          return updated;
+        }
+        return s;
+      })
     );
   };
 
@@ -324,6 +394,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSchedules((prev) => [...prev, newSchedule]);
     setSessions((prev) => [...prev, ...newSessionsWithIds]);
 
+    // Kirim langsung ke Supabase
+    syncScheduleToSupabase(newSchedule);
+    newSessionsWithIds.forEach((s) => syncSessionToSupabase(s));
+
     return { success: true };
   };
 
@@ -343,20 +417,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!targetSession) return;
 
     const previousStatus = targetSession.attendanceStatus;
+    const updatedSession: TherapySession = {
+      ...targetSession,
+      attendanceStatus: status,
+      attendanceNotes: notes !== undefined ? notes : targetSession.attendanceNotes,
+      markedAt: new Date().toISOString(),
+      markedBy: markedBy || targetSession.markedBy,
+    };
 
     setSessions((prev) =>
-      prev.map((s) =>
-        s.id === sessionId
-          ? {
-              ...s,
-              attendanceStatus: status,
-              attendanceNotes: notes !== undefined ? notes : s.attendanceNotes,
-              markedAt: new Date().toISOString(),
-              markedBy: markedBy || s.markedBy,
-            }
-          : s
-      )
+      prev.map((s) => (s.id === sessionId ? updatedSession : s))
     );
+    // Kirim absensi ke Supabase
+    syncSessionToSupabase(updatedSession);
 
     // Aturan Saldo Jam: Jika sesi dibatalkan karena sekolah meliburkan, jam tersebut otomatis masuk menjadi saldo jam siswa
     if (status === 'Libur dari sekolah' && previousStatus !== 'Libur dari sekolah') {
@@ -579,7 +652,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               )}`
             : undefined;
 
-          return {
+          const updated: Payment = {
             ...p,
             status,
             paymentDate: isNowLunas ? new Date().toISOString().split('T')[0] : undefined,
@@ -588,6 +661,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             markedBy: isNowLunas ? markedBy : undefined,
             notes: notes !== undefined ? notes : p.notes,
           };
+          syncPaymentToSupabase(updated);
+          return updated;
         }
         return p;
       })
@@ -706,6 +781,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const syncAllToSupabase = async (usersList: any[]) => {
+    return pushAllLocalDataToSupabase({
+      users: usersList,
+      packages,
+      teachers,
+      students,
+      schedules,
+      sessions,
+      payments,
+      studentLeaves,
+      teacherLeaves,
+      saldoHistory,
+    });
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -745,6 +835,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markPayrollPaid,
         activeMonth,
         setActiveMonth,
+        syncAllToSupabase,
       }}
     >
       {children}

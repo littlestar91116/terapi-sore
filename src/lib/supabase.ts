@@ -61,7 +61,7 @@ export function getSupabase(): SupabaseClient | null {
   return supabaseInstance;
 }
 
-export async function testSupabaseConnection(): Promise<{ success: boolean; message: string }> {
+export async function testSupabaseConnection(): Promise<{ success: boolean; message: string; profileCount?: number }> {
   const client = getSupabase();
   if (!client) {
     return {
@@ -71,16 +71,21 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
   }
 
   try {
-    const { error } = await client.from('packages').select('id').limit(1);
-    if (error) {
+    const { count: profileCount, error: profileErr } = await client
+      .from('profiles')
+      .select('id', { count: 'exact', head: true });
+
+    if (profileErr) {
       return {
         success: false,
-        message: `Terhubung ke Supabase namun query gagal: ${error.message}. Pastikan schema.sql sudah dijalankan di SQL Editor.`,
+        message: `Terhubung ke Supabase namun query tabel profiles gagal: ${profileErr.message}. Pastikan schema.sql versi terbaru sudah dijalankan di SQL Editor.`,
       };
     }
+
     return {
       success: true,
-      message: 'Koneksi ke Supabase berhasil dan tabel siap digunakan!',
+      message: `Koneksi Supabase aktif dan berhasil! Ditemukan ${profileCount ?? 0} akun pengguna di tabel profiles.`,
+      profileCount: profileCount ?? 0,
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);

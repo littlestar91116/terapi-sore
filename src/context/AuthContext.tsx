@@ -2,6 +2,12 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole, AppModule, RolePermission, Student, Teacher } from '../types';
 import { SEED_USERS, SEED_ROLE_PERMISSIONS } from '../data/seedData';
 import { getSupabase } from '../lib/supabase';
+import {
+  ensureUuid,
+  syncProfileToSupabase,
+  deleteProfileFromSupabase,
+  fetchProfilesFromSupabase,
+} from '../lib/supabaseSync';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
@@ -91,6 +97,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_PERMS_KEY, JSON.stringify(permissions));
   }, [permissions]);
+
+  // Muat akun dari Supabase saat aplikasi dibuka jika Supabase terhubung
+  useEffect(() => {
+    fetchProfilesFromSupabase().then((remoteProfiles) => {
+      if (remoteProfiles && remoteProfiles.length > 0) {
+        setUsers((prev) => {
+          const merged = [...prev];
+          for (const remote of remoteProfiles) {
+            const idx = merged.findIndex(
+              (m) => m.username.toLowerCase() === remote.username.toLowerCase()
+            );
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...remote };
+            } else {
+              merged.push(remote);
+            }
+          }
+          return merged;
+        });
+      }
+    });
+  }, []);
 
   const currentRole: UserRole = currentUser?.role || 'wali';
   const isFrozen: boolean = currentUser?.status === 'dibekukan';
@@ -209,7 +237,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Direct Account Management
   const addUserAccount = (user: UserProfile & { password?: string }) => {
-    setUsers((prev) => [...prev, user]);
+    const validUser = { ...user, id: ensureUuid(user.id) };
+    setUsers((prev) => [...prev, validUser]);
+    // Kirim langsung ke Supabase
+    syncProfileToSupabase(validUser);
   };
 
   const updateUserAccount = (user: Partial<UserProfile> & { id: string; password?: string }) => {
@@ -221,6 +252,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { password: _, ...safe } = updated;
             setCurrentUser(safe);
           }
+          // Kirim update ke Supabase
+          syncProfileToSupabase(updated);
           return updated;
         }
         return u;
@@ -229,7 +262,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteUserAccount = (userId: string) => {
+    const target = users.find((u) => u.id === userId);
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+    if (target) {
+      deleteProfileFromSupabase(target.username);
+    }
   };
 
   // Otomatis sinkronisasi akun Wali Murid saat data siswa dibuat atau diedit
@@ -279,6 +316,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         resultUser = updatedUser;
+        // Kirim langsung ke Supabase
+        syncProfileToSupabase(updatedUser);
         return next;
       } else {
         // Buat akun baru otomatis
@@ -296,7 +335,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           finalUsername = `${baseUsername}${count++}`;
         }
 
-        const newUserId = student.parentUserId || `usr-wali-${Date.now().toString(36)}`;
+        const newUserId = ensureUuid(student.parentUserId);
         const newUser: UserProfile & { password?: string } = {
           id: newUserId,
           username: finalUsername,
@@ -311,6 +350,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         resultUser = newUser;
+        // Kirim langsung ke Supabase
+        syncProfileToSupabase(newUser);
         return [...prevUsers, newUser];
       }
     });
@@ -381,6 +422,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         resultUser = updatedUser;
+        // Kirim langsung ke Supabase
+        syncProfileToSupabase(updatedUser);
         return next;
       } else {
         const cleanName = teacher.name
@@ -398,7 +441,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           finalUsername = `${baseUsername}${count++}`;
         }
 
-        const newUserId = teacher.userId || `usr-${assignedRole}-${Date.now().toString(36)}`;
+        const newUserId = ensureUuid(teacher.userId);
         const newUser: UserProfile & { password?: string } = {
           id: newUserId,
           username: finalUsername,
@@ -413,6 +456,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         resultUser = newUser;
+        // Kirim langsung ke Supabase
+        syncProfileToSupabase(newUser);
         return [...prevUsers, newUser];
       }
     });
@@ -433,6 +478,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { password: _, ...safe } = updated;
             setCurrentUser(safe);
           }
+          syncProfileToSupabase(updated);
           return updated;
         }
         return u;
