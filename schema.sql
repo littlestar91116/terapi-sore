@@ -70,7 +70,10 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS position TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT DEFAULT '123';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status account_status DEFAULT 'aktif';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (LOWER(email)) WHERE email IS NOT NULL;
+-- Drop index unik jika pernah dibuat sebelumnya agar tidak error jika ada email terduplikasi
+DROP INDEX IF EXISTS public.idx_profiles_email;
+-- Buat index biasa (non-unique) untuk optimasi pencarian tanpa memaksa keunikan email
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (LOWER(email)) WHERE email IS NOT NULL;
 
 -- 3B. TABEL USER ACCOUNTS (KREDENSIAL LOGIN USERNAME & PASSWORD TANPA EMAIL)
 CREATE TABLE IF NOT EXISTS public.user_accounts (
@@ -511,14 +514,14 @@ ON CONFLICT (id) DO UPDATE SET
     can_delete = EXCLUDED.can_delete;
 
 -- Seed Profil Pengguna Awal
-INSERT INTO public.profiles (id, username, full_name, role, position, password, status, phone, email) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'admin', 'Administrator Utama', 'admin', 'Administrator Lembaga', '12345', 'aktif', '081234567890', 'admin@littlestar.id'),
-    ('00000000-0000-0000-0000-000000000002', 'kepala', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'Kepala Lembaga', '12345', 'aktif', '081234567891', 'kepala@littlestar.id'),
-    ('00000000-0000-0000-0000-000000000003', 'guru1', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'Terapis Wicara', '12345', 'aktif', '081234567892', 'siti@littlestar.id'),
-    ('00000000-0000-0000-0000-000000000004', 'guru2', 'Budi Santoso, S.Pd', 'guru', 'Terapis Okupasi', '12345', 'aktif', '081234567893', 'budi@littlestar.id'),
-    ('00000000-0000-0000-0000-000000000005', 'wali1', 'Ibu Ratna Dewi', 'wali', 'Wali Murid', '12345', 'aktif', '081298765432', 'ratna@gmail.com'),
-    ('00000000-0000-0000-0000-000000000006', 'wali2', 'Bapak Hendra Gunawan', 'wali', 'Wali Murid', '12345', 'dibekukan', '081298765433', 'hendra@gmail.com')
-ON CONFLICT (id) DO UPDATE SET
+INSERT INTO public.profiles (username, full_name, role, position, password, status, phone, email) VALUES
+    ('admin', 'Administrator Utama', 'admin', 'Administrator Lembaga', '12345', 'aktif', '081234567890', 'admin@littlestar.id'),
+    ('kepala', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'Kepala Lembaga', '123', 'aktif', '081234567891', 'kepala@littlestar.id'),
+    ('guru', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'Terapis Wicara', '123', 'aktif', '081234567892', 'siti@littlestar.id'),
+    ('budi', 'Budi Santoso, S.Pd', 'guru', 'Terapis Okupasi', '123', 'aktif', '081234567893', 'budi@littlestar.id'),
+    ('wali', 'Ibu Ratna Dewi', 'wali', 'Wali Murid', '123', 'aktif', '081298765432', 'ratna@gmail.com'),
+    ('wali_beku', 'Bapak Hendra Gunawan', 'wali', 'Wali Murid', '123', 'dibekukan', '081298765433', 'hendra@gmail.com')
+ON CONFLICT (username) DO UPDATE SET
     full_name = EXCLUDED.full_name,
     role = EXCLUDED.role,
     position = EXCLUDED.position,
@@ -528,28 +531,34 @@ ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email;
 
 -- Seed Akun Login Username & Password (public.user_accounts)
-INSERT INTO public.user_accounts (id, username, password, full_name, role, position, status, phone, user_id) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'admin', '12345', 'Administrator Utama', 'admin', 'Administrator Lembaga', 'aktif', '081234567890', '00000000-0000-0000-0000-000000000001'),
-    ('00000000-0000-0000-0000-000000000002', 'kepala', '123', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'Kepala Lembaga', 'aktif', '081234567891', '00000000-0000-0000-0000-000000000002'),
-    ('00000000-0000-0000-0000-000000000003', 'guru', '123', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'Terapis Wicara', 'aktif', '081234567892', '00000000-0000-0000-0000-000000000003'),
-    ('00000000-0000-0000-0000-000000000004', 'budi', '123', 'Budi Santoso, S.Pd', 'guru', 'Terapis Okupasi', 'aktif', '081234567893', '00000000-0000-0000-0000-000000000004'),
-    ('00000000-0000-0000-0000-000000000005', 'wali', '123', 'Ibu Ratna Dewi', 'wali', 'Wali Murid', 'aktif', '081298765432', '00000000-0000-0000-0000-000000000005'),
-    ('00000000-0000-0000-0000-000000000006', 'wali_beku', '123', 'Bapak Hendra Gunawan', 'wali', 'Wali Murid', 'dibekukan', '081298765433', '00000000-0000-0000-0000-000000000006')
+INSERT INTO public.user_accounts (username, password, full_name, role, position, status, phone) VALUES
+    ('admin', '12345', 'Administrator Utama', 'admin', 'Administrator Lembaga', 'aktif', '081234567890'),
+    ('kepala', '123', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'Kepala Lembaga', 'aktif', '081234567891'),
+    ('guru', '123', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'Terapis Wicara', 'aktif', '081234567892'),
+    ('budi', '123', 'Budi Santoso, S.Pd', 'guru', 'Terapis Okupasi', 'aktif', '081234567893'),
+    ('wali', '123', 'Ibu Ratna Dewi', 'wali', 'Wali Murid', 'aktif', '081298765432'),
+    ('wali_beku', '123', 'Bapak Hendra Gunawan', 'wali', 'Wali Murid', 'dibekukan', '081298765433')
 ON CONFLICT (username) DO UPDATE SET
     password = EXCLUDED.password,
     full_name = EXCLUDED.full_name,
     role = EXCLUDED.role,
     position = EXCLUDED.position,
     status = EXCLUDED.status,
-    phone = EXCLUDED.phone,
-    user_id = EXCLUDED.user_id;
+    phone = EXCLUDED.phone;
+
+-- Hubungkan user_id di user_accounts ke profiles(id)
+UPDATE public.user_accounts ua
+SET user_id = p.id
+FROM public.profiles p
+WHERE LOWER(ua.username) = LOWER(p.username) AND (ua.user_id IS NULL OR ua.user_id != p.id);
 
 -- Seed Guru Awal
 INSERT INTO public.teachers (id, user_id, name, position, role, phone, address, join_date, status, salary_system, hourly_rate, monthly_salary) VALUES
-    ('GUR-001', '00000000-0000-0000-0000-000000000003', 'Siti Rahmawati, S.Tr.Kes', 'Terapis Wicara', 'guru', '081234567892', 'Jl. Melati No. 14, Jakarta Selatan', '2023-01-15', 'aktif', 'per_jam', 20000, 0),
-    ('GUR-002', '00000000-0000-0000-0000-000000000004', 'Budi Santoso, S.Pd', 'Terapis Okupasi', 'guru', '081234567893', 'Jl. Anggrek No. 8, Tangerang Selatan', '2023-03-01', 'aktif', 'bulanan', 0, 3200000),
+    ('GUR-001', (SELECT id FROM public.profiles WHERE username = 'guru' LIMIT 1), 'Siti Rahmawati, S.Tr.Kes', 'Terapis Wicara', 'guru', '081234567892', 'Jl. Melati No. 14, Jakarta Selatan', '2023-01-15', 'aktif', 'per_jam', 20000, 0),
+    ('GUR-002', (SELECT id FROM public.profiles WHERE username = 'budi' LIMIT 1), 'Budi Santoso, S.Pd', 'Terapis Okupasi', 'guru', '081234567893', 'Jl. Anggrek No. 8, Tangerang Selatan', '2023-03-01', 'aktif', 'bulanan', 0, 3200000),
     ('GUR-003', NULL, 'Dewi Lestari, S.Psi', 'Terapis Sensori Integrasi', 'guru', '081234567894', 'Jl. Flamboyan No. 20, Depok', '2023-06-10', 'aktif', 'per_jam', 20000, 0)
 ON CONFLICT (id) DO UPDATE SET
+    user_id = EXCLUDED.user_id,
     name = EXCLUDED.name,
     position = EXCLUDED.position,
     role = EXCLUDED.role,
@@ -562,15 +571,16 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- Seed Siswa Awal
 INSERT INTO public.students (id, name, birth_date, parent_name, parent_phone, parent_user_id, address, package_id, teacher_id, account_status, saldo_jam) VALUES
-    ('SIS-001', 'Muhammad Alif', '2019-05-12', 'Ibu Ratna Dewi', '081298765432', '00000000-0000-0000-0000-000000000005', 'Jl. Mawar Indah Blok B3, Jakarta', 'PKT-2-3', 'GUR-001', 'aktif', 2),
+    ('SIS-001', 'Muhammad Alif', '2019-05-12', 'Ibu Ratna Dewi', '081298765432', (SELECT id FROM public.profiles WHERE username = 'wali' LIMIT 1), 'Jl. Mawar Indah Blok B3, Jakarta', 'PKT-2-3', 'GUR-001', 'aktif', 2),
     ('SIS-002', 'Nadhira Kirana', '2020-02-18', 'Bapak Surya Pranoto', '081387654321', NULL, 'Jl. Cempaka Baru No. 12, Jakarta', 'PKT-1-2', 'GUR-001', 'aktif', 0),
-    ('SIS-003', 'Kenzo Pratama', '2018-11-25', 'Bapak Hendra Gunawan', '081298765433', '00000000-0000-0000-0000-000000000006', 'Jl. Pinus No. 5, Jakarta Barat', 'PKT-1-3', 'GUR-002', 'dibekukan', 0),
-    ('SIS-004', 'Aisyah Putri', '2019-09-08', 'Ibu Ratna Dewi', '081298765432', '00000000-0000-0000-0000-000000000005', 'Jl. Mawar Indah Blok B3, Jakarta', 'PKT-2-2', 'GUR-002', 'aktif', 1)
+    ('SIS-003', 'Kenzo Pratama', '2018-11-25', 'Bapak Hendra Gunawan', '081298765433', (SELECT id FROM public.profiles WHERE username = 'wali_beku' LIMIT 1), 'Jl. Pinus No. 5, Jakarta Barat', 'PKT-1-3', 'GUR-002', 'dibekukan', 0),
+    ('SIS-004', 'Aisyah Putri', '2019-09-08', 'Ibu Ratna Dewi', '081298765432', (SELECT id FROM public.profiles WHERE username = 'wali' LIMIT 1), 'Jl. Mawar Indah Blok B3, Jakarta', 'PKT-2-2', 'GUR-002', 'aktif', 1)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     birth_date = EXCLUDED.birth_date,
     parent_name = EXCLUDED.parent_name,
     parent_phone = EXCLUDED.parent_phone,
+    parent_user_id = EXCLUDED.parent_user_id,
     address = EXCLUDED.address,
     package_id = EXCLUDED.package_id,
     teacher_id = EXCLUDED.teacher_id,
