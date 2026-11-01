@@ -53,23 +53,23 @@ export const HakAksesView: React.FC = () => {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
   const [userForm, setUserForm] = useState<{
-    email: string;
+    username: string;
     fullName: string;
     role: UserRole;
     position: string;
     phone: string;
     status: AccountStatus;
     password?: string;
-    username?: string;
+    email?: string;
   }>({
-    email: '',
+    username: '',
     fullName: '',
     role: 'guru',
     position: 'Guru Terapis',
     phone: '',
     status: 'aktif',
     password: '123',
-    username: '',
+    email: '',
   });
 
   const moduleNames: { id: AppModule; label: string }[] = [
@@ -114,14 +114,14 @@ export const HakAksesView: React.FC = () => {
   const handleOpenAddUser = () => {
     setEditingUser(null);
     setUserForm({
-      email: '',
+      username: '',
       fullName: '',
       role: 'guru',
       position: 'Guru Terapis',
       phone: '',
       status: 'aktif',
       password: '123',
-      username: '',
+      email: '',
     });
     setIsUserModalOpen(true);
   };
@@ -129,35 +129,35 @@ export const HakAksesView: React.FC = () => {
   const handleOpenEditUser = (user: UserProfile) => {
     setEditingUser(user);
     setUserForm({
-      email: user.email || '',
+      username: user.username || (user.email ? user.email.split('@')[0] : ''),
       fullName: user.fullName,
       role: user.role,
       position: user.position || (user.role === 'wali' ? 'Wali Murid' : 'Guru Terapis'),
       phone: user.phone || '',
       status: user.status,
       password: user.password || '123',
-      username: user.username || user.email?.split('@')[0] || '',
+      email: user.email || '',
     });
     setIsUserModalOpen(true);
   };
 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userForm.email.trim() || !userForm.fullName.trim()) return;
+    if (!userForm.username.trim() || !userForm.fullName.trim()) return;
 
-    const derivedUsername = userForm.email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9_]/g, '');
+    const cleanUsername = userForm.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
 
     if (editingUser) {
       updateUserAccount({
         id: editingUser.id,
         ...userForm,
-        username: derivedUsername || editingUser.username || 'user',
+        username: cleanUsername,
       });
     } else {
       const newUser: UserProfile & { password?: string } = {
         id: `usr-${Date.now().toString(36)}`,
         ...userForm,
-        username: derivedUsername || 'user',
+        username: cleanUsername,
       };
       addUserAccount(newUser);
     }
@@ -350,7 +350,7 @@ export const HakAksesView: React.FC = () => {
                 type="text"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
-                placeholder="Cari berdasarkan email, nama lengkap, atau jabatan..."
+                placeholder="Cari berdasarkan username, nama lengkap, atau jabatan..."
                 className="w-full pl-3 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
               />
             </div>
@@ -375,7 +375,7 @@ export const HakAksesView: React.FC = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/70 border-b border-slate-200/80 text-2xs font-bold uppercase tracking-wider text-slate-500">
-                    <th className="px-5 py-3.5">Email Akun (Login) & ID</th>
+                    <th className="px-5 py-3.5">Username & ID</th>
                     <th className="px-4 py-3.5">Nama & Jabatan</th>
                     <th className="px-4 py-3.5">Peran (Role)</th>
                     <th className="px-4 py-3.5">Password</th>
@@ -389,18 +389,18 @@ export const HakAksesView: React.FC = () => {
                       const matchRole = roleFilter === 'semua' || u.role === roleFilter;
                       const q = userSearch.toLowerCase();
                       const matchSearch =
-                        (u.email && u.email.toLowerCase().includes(q)) ||
+                        (u.username && u.username.toLowerCase().includes(q)) ||
                         u.fullName.toLowerCase().includes(q) ||
                         (u.position && u.position.toLowerCase().includes(q)) ||
                         (u.phone && u.phone.includes(q)) ||
-                        (u.username && u.username.toLowerCase().includes(q));
+                        (u.email && u.email.toLowerCase().includes(q));
                       return matchRole && matchSearch;
                     })
                     .map((user) => (
                       <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="px-5 py-4">
                           <div className="font-mono font-bold text-slate-900 text-xs">
-                            {user.email || `@${user.username}`}
+                            @{user.username}
                           </div>
                           <span className="text-3xs text-slate-400 font-mono">{user.id}</span>
                         </td>
@@ -457,10 +457,10 @@ export const HakAksesView: React.FC = () => {
                               <Edit2 className="w-3.5 h-3.5" />
                               Ubah
                             </button>
-                            {user.email !== 'admin@littlestar.id' && user.role !== 'admin' && (
+                            {user.username !== 'admin' && user.role !== 'admin' && (
                               <button
                                 onClick={() => {
-                                  if (confirm(`Hapus akun ${user.email || user.fullName}?`)) {
+                                  if (confirm(`Hapus akun @${user.username}?`)) {
                                     deleteUserAccount(user.id);
                                   }
                                 }}
@@ -486,21 +486,21 @@ export const HakAksesView: React.FC = () => {
         isOpen={isUserModalOpen}
         onClose={() => setIsUserModalOpen(false)}
         title={editingUser ? 'Ubah Akun Pengguna' : 'Buat Akun Pengguna Baru'}
-        subtitle="Kelola email login, kata sandi, jabatan, peran, dan status akun"
+        subtitle="Kelola username, kata sandi, jabatan, peran, dan status akun"
         maxWidth="md"
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Email Akun (Login) *
+                Username *
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                value={userForm.email}
-                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                placeholder="Contoh: guru.ahmad@littlestar.id"
+                value={userForm.username}
+                onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                placeholder="Contoh: guru_ahmad"
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
               />
             </div>

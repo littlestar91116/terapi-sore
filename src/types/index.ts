@@ -29,8 +29,8 @@ export type AppModule =
 
 export interface UserProfile {
   id: string;
-  email: string; // Kredensial utama login akun
-  username?: string; // Opsional / backward compatibility
+  username: string; // Kredensial utama login akun (tanpa email)
+  email?: string; // Opsional
   fullName: string;
   role: UserRole;
   status: AccountStatus;
@@ -39,6 +39,20 @@ export interface UserProfile {
   teacherId?: string; // Jika akun ini terikat ke data guru
   studentIds?: string[]; // Jika akun wali, list ID siswa anaknya
   password?: string;
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  password: string;
+  fullName: string;
+  role: UserRole;
+  position?: string;
+  status: AccountStatus;
+  phone?: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Package {

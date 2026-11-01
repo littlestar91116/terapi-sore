@@ -97,7 +97,8 @@ export function ensureUuid(id?: string | null): string {
 }
 
 // ==============================================================================
-// 1. SINKRONISASI PROFILES (AKUN PENGGUNA BERBASIS EMAIL)
+// ==============================================================================
+// 1. SINKRONISASI AKUN (USER_ACCOUNTS & PROFILES DENGAN USERNAME & PASSWORD)
 // ==============================================================================
 
 export async function syncProfileToSupabase(
@@ -109,61 +110,72 @@ export async function syncProfileToSupabase(
     return { success: false, error: 'Supabase belum terkonfigurasi' };
   }
 
-  const cleanEmail = (user.email || user.username || 'user@littlestar.id').trim().toLowerCase();
-  setSyncStatus('syncing', `Menyimpan akun ${cleanEmail} ke Supabase...`);
+  const cleanUsername = (user.username || user.email?.split('@')[0] || 'user')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '');
+
+  setSyncStatus('syncing', `Menyimpan akun @${cleanUsername} ke Supabase...`);
 
   try {
     const uuidId = ensureUuid(user.id);
-    const payload = {
+
+    // 1. Simpan ke tabel credentials utama: public.user_accounts
+    const userAccountPayload = {
       id: uuidId,
-      email: cleanEmail,
-      username: (user.username || cleanEmail).trim().toLowerCase(),
+      username: cleanUsername,
+      password: user.password || '123',
+      full_name: user.fullName.trim(),
+      role: user.role,
+      position: user.position || (user.role === 'wali' ? 'Wali Murid' : 'Staf'),
+      status: user.status || 'aktif',
+      phone: user.phone || null,
+      user_id: uuidId,
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      await supabase
+        .from('user_accounts')
+        .upsert(userAccountPayload, { onConflict: 'username' });
+    } catch (e) {
+      console.warn('Simpan ke user_accounts gagal (tabel mungkin belum dibuat di SQL Editor):', e);
+    }
+
+    // 2. Simpan juga ke public.profiles untuk kompatibilitas data
+    const profilePayload = {
+      id: uuidId,
+      username: cleanUsername,
       full_name: user.fullName.trim(),
       role: user.role,
       position: user.position || (user.role === 'wali' ? 'Wali Murid' : 'Staf'),
       status: user.status || 'aktif',
       phone: user.phone || null,
       password: user.password || '123',
+      email: user.email || `${cleanUsername}@littlestar.id`,
       updated_at: new Date().toISOString(),
     };
 
-    // Coba upsert dengan onConflict email terlebih dahulu
     let { data, error } = await supabase
       .from('profiles')
-      .upsert(payload, { onConflict: 'email' })
+      .upsert(profilePayload, { onConflict: 'username' })
       .select()
       .single();
 
-    // Fallback jika database schema lama memiliki constraint onConflict pada 'id' atau 'username'
     if (error) {
       const retryId = await supabase
         .from('profiles')
-        .upsert(payload, { onConflict: 'id' })
+        .upsert(profilePayload, { onConflict: 'id' })
         .select()
         .single();
 
       if (!retryId.error) {
         data = retryId.data;
         error = null;
-      } else {
-        const retryUsername = await supabase
-          .from('profiles')
-          .upsert(payload, { onConflict: 'username' })
-          .select()
-          .single();
-
-        if (!retryUsername.error) {
-          data = retryUsername.data;
-          error = null;
-        } else {
-          console.error('Supabase profile upsert error:', error, retryId.error, retryUsername.error);
-          setSyncStatus('error', `Gagal simpan akun: ${error.message}`, error.message);
-          return { success: false, error: error.message };
-        }
       }
     }
 
-    setSyncStatus('saved', `Akun ${cleanEmail} otomatis tersimpan ke Supabase`);
+    setSyncStatus('saved', `Akun @${cleanUsername} otomatis tersimpan ke Supabase`);
     return { success: true, data };
   } catch (err: any) {
     console.error('Gagal sinkron akun ke Supabase:', err);
@@ -173,23 +185,33 @@ export async function syncProfileToSupabase(
   }
 }
 
-export async function deleteProfileFromSupabase(emailOrId: string): Promise<boolean> {
+export async function deleteProfileFromSupabase(usernameOrId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const clean = emailOrId.toLowerCase().trim();
-  setSyncStatus('syncing', `Menghapus akun ${clean} dari Supabase...`);
+  const clean = usernameOrId.toLowerCase().trim();
+  setSyncStatus('syncing', `Menghapus akun @${clean} dari Supabase...`);
   try {
+    // Hapus dari user_accounts
+    try {
+      await supabase
+        .from('user_accounts')
+        .delete()
+        .or(`username.eq.${clean},user_id.eq.${clean},id.eq.${clean}`);
+    } catch {}
+
+    // Hapus dari profiles
     const { error } = await supabase
       .from('profiles')
       .delete()
-      .or(`email.eq.${clean},username.eq.${clean},id.eq.${clean}`);
+      .or(`username.eq.${clean},id.eq.${clean},email.eq.${clean}`);
+
     if (error) {
       console.error('Supabase profile delete error:', error);
       setSyncStatus('error', `Gagal hapus akun: ${error.message}`, error.message);
       return false;
     }
-    setSyncStatus('saved', `Akun ${clean} terhapus dari Supabase`);
+    setSyncStatus('saved', `Akun @${clean} terhapus dari Supabase`);
     return true;
   } catch (err) {
     console.error('Gagal hapus profil dari Supabase:', err);
@@ -203,13 +225,33 @@ export async function fetchProfilesFromSupabase(): Promise<(UserProfile & { pass
   if (!supabase) return null;
 
   try {
+    // Coba baca dari user_accounts terlebih dahulu
+    const { data: accountsData, error: accountsError } = await supabase
+      .from('user_accounts')
+      .select('*');
+
+    if (!accountsError && accountsData && accountsData.length > 0) {
+      return accountsData.map((d: any) => ({
+        id: d.id,
+        username: d.username,
+        email: d.username ? `${d.username}@littlestar.id` : undefined,
+        fullName: d.full_name,
+        role: d.role,
+        position: d.position,
+        status: d.status,
+        phone: d.phone,
+        password: d.password || '123',
+      }));
+    }
+
+    // Fallback baca dari profiles
     const { data, error } = await supabase.from('profiles').select('*');
     if (error || !data) return null;
 
     return data.map((d: any) => ({
       id: d.id,
-      email: d.email || `${d.username || 'user'}@littlestar.id`,
-      username: d.username || d.email,
+      username: d.username || (d.email ? d.email.split('@')[0] : 'user'),
+      email: d.email,
       fullName: d.full_name,
       role: d.role,
       position: d.position,

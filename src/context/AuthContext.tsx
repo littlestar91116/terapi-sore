@@ -13,7 +13,7 @@ interface AuthContextType {
   currentUser: UserProfile | null;
   currentRole: UserRole;
   isFrozen: boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  login: (username: string, password?: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   switchRole: (role: UserRole, accountStatus?: 'aktif' | 'dibekukan') => void;
   hasPermission: (module: AppModule, action: 'view' | 'add' | 'edit' | 'delete') => boolean;
@@ -27,11 +27,11 @@ interface AuthContextType {
   // Auto-sync for Student and Teacher
   syncStudentParentAccount: (
     student: Student,
-    customCreds?: { email?: string; password?: string }
+    customCreds?: { username?: string; password?: string }
   ) => UserProfile;
   syncTeacherAccount: (
     teacher: Teacher,
-    customCreds?: { email?: string; password?: string; role?: UserRole; position?: string }
+    customCreds?: { username?: string; password?: string; role?: UserRole; position?: string }
   ) => UserProfile;
   syncFreezeStudent: (studentId: string, freeze: boolean) => void;
 }
@@ -124,28 +124,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentRole: UserRole = currentUser?.role || 'wali';
   const isFrozen: boolean = currentUser?.status === 'dibekukan';
 
-  // Login menggunakan EMAIL
-  const login = async (emailInput: string, password = ''): Promise<{ success: boolean; message?: string }> => {
+  // Login menggunakan USERNAME (atau email jika terisi)
+  const login = async (usernameInput: string, password = ''): Promise<{ success: boolean; message?: string }> => {
     const supabase = getSupabase();
-    const cleanEmail = emailInput.trim().toLowerCase();
+    const cleanUsername = usernameInput.trim().toLowerCase().replace(/[^a-z0-9_@.]/g, '');
 
-    // 1. Cek database Supabase terlebih dahulu jika aktif
+    // 1. Cek database Supabase: tabel user_accounts terlebih dahulu, lalu profiles
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
+        // Cek tabel user_accounts
+        const { data: accData, error: accError } = await supabase
+          .from('user_accounts')
           .select('*')
-          .or(`email.ilike.${cleanEmail},username.ilike.${cleanEmail}`)
-          .single();
+          .ilike('username', cleanUsername)
+          .maybeSingle();
 
-        if (!error && data) {
-          if (data.password && password && data.password !== password) {
+        if (!accError && accData) {
+          if (accData.password && password && accData.password !== password) {
             return {
               success: false,
               message: 'Password salah. Silakan periksa kembali kata sandi Anda.',
             };
           }
-          if (data.status === 'nonaktif') {
+          if (accData.status === 'nonaktif') {
             return {
               success: false,
               message: 'Akun Anda sedang dinonaktifkan oleh administrator.',
@@ -153,14 +154,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           const userObj: UserProfile = {
-            id: data.id,
-            email: data.email || cleanEmail,
-            username: data.username || data.email,
-            fullName: data.full_name,
-            role: data.role as UserRole,
-            status: data.status as 'aktif' | 'dibekukan' | 'nonaktif',
-            phone: data.phone,
-            position: data.position,
+            id: accData.id || accData.user_id,
+            username: accData.username,
+            fullName: accData.full_name,
+            role: accData.role as UserRole,
+            status: accData.status as 'aktif' | 'dibekukan' | 'nonaktif',
+            phone: accData.phone,
+            position: accData.position,
+          };
+          setCurrentUser(userObj);
+          return { success: true };
+        }
+
+        // Cek tabel profiles jika belum ketemu
+        const { data: profData, error: profError } = await supabase
+          .from('profiles')
+          .select('*')
+          .or(`username.ilike.${cleanUsername},email.ilike.${cleanUsername}`)
+          .maybeSingle();
+
+        if (!profError && profData) {
+          if (profData.password && password && profData.password !== password) {
+            return {
+              success: false,
+              message: 'Password salah. Silakan periksa kembali kata sandi Anda.',
+            };
+          }
+          if (profData.status === 'nonaktif') {
+            return {
+              success: false,
+              message: 'Akun Anda sedang dinonaktifkan oleh administrator.',
+            };
+          }
+
+          const userObj: UserProfile = {
+            id: profData.id,
+            username: profData.username || cleanUsername,
+            email: profData.email,
+            fullName: profData.full_name,
+            role: profData.role as UserRole,
+            status: profData.status as 'aktif' | 'dibekukan' | 'nonaktif',
+            phone: profData.phone,
+            position: profData.position,
           };
           setCurrentUser(userObj);
           return { success: true };
@@ -173,8 +208,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 2. Cek dari daftar akun dinamis lokal (users)
     const matched = users.find(
       (u) =>
-        (u.email && u.email.toLowerCase() === cleanEmail) ||
-        (u.username && u.username.toLowerCase() === cleanEmail)
+        (u.username && u.username.toLowerCase() === cleanUsername) ||
+        (u.email && u.email.toLowerCase() === cleanUsername)
     );
 
     if (matched) {
@@ -197,7 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return {
       success: false,
-      message: 'Email tidak ditemukan. Pastikan email yang Anda masukkan sudah terdaftar di sistem Little Star Learning Center.',
+      message: 'Username tidak ditemukan. Pastikan username yang Anda masukkan sudah terdaftar di sistem Little Star Learning Center.',
     };
   };
 
@@ -254,17 +289,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(newPermissions);
   };
 
-  // Direct Account Management (Berbasis Email)
+  // Direct Account Management (Berbasis Username)
   const addUserAccount = (user: UserProfile & { password?: string }) => {
-    const cleanEmail = (user.email || 'user@littlestar.id').trim().toLowerCase();
+    const cleanUsername = (user.username || user.email?.split('@')[0] || 'user')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '');
+
     const validUser = {
       ...user,
       id: ensureUuid(user.id),
-      email: cleanEmail,
-      username: cleanEmail,
+      username: cleanUsername,
     };
     setUsers((prev) => [...prev, validUser]);
-    // Kirim langsung otomatis ke Supabase
+    // Kirim langsung otomatis ke Supabase (user_accounts & profiles)
     syncProfileToSupabase(validUser);
   };
 
@@ -272,12 +310,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === user.id) {
-          const cleanEmail = (user.email || u.email).trim().toLowerCase();
+          const cleanUsername = (user.username || u.username)
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '');
+
           const updated = {
             ...u,
             ...user,
-            email: cleanEmail,
-            username: cleanEmail,
+            username: cleanUsername,
           };
           if (currentUser?.id === user.id) {
             const { password: _, ...safe } = updated;
@@ -296,14 +337,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = users.find((u) => u.id === userId);
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     if (target) {
-      deleteProfileFromSupabase(target.email || target.id);
+      deleteProfileFromSupabase(target.username || target.id);
     }
   };
 
-  // Otomatis pembuatan & sinkronisasi akun Wali Murid berbasis EMAIL
+  // Otomatis pembuatan & sinkronisasi akun Wali Murid berbasis USERNAME
   const syncStudentParentAccount = (
     student: Student,
-    customCreds?: { email?: string; password?: string }
+    customCreds?: { username?: string; password?: string }
   ): UserProfile => {
     let resultUser: UserProfile = { ...student } as any;
 
@@ -312,7 +353,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingIndex = prevUsers.findIndex(
         (u) =>
           (student.parentUserId && u.id === student.parentUserId) ||
-          (customCreds?.email && u.email && u.email.toLowerCase() === customCreds.email.toLowerCase().trim()) ||
+          (customCreds?.username && u.username && u.username.toLowerCase() === customCreds.username.toLowerCase().trim()) ||
           (u.phone && student.parentPhone && u.phone === student.parentPhone) ||
           (u.role === 'wali' && u.fullName.toLowerCase() === student.parentName.toLowerCase())
       );
@@ -323,15 +364,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           new Set([...(existing.studentIds || []), student.id])
         );
 
-        let targetEmail = existing.email;
-        if (customCreds?.email && customCreds.email.trim()) {
-          targetEmail = customCreds.email.trim().toLowerCase();
+        let targetUsername = existing.username;
+        if (customCreds?.username && customCreds.username.trim()) {
+          targetUsername = customCreds.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
         }
 
         const updatedUser: UserProfile & { password?: string } = {
           ...existing,
-          email: targetEmail,
-          username: targetEmail,
+          username: targetUsername,
           fullName: student.parentName,
           phone: student.parentPhone || existing.phone,
           status: student.accountStatus,
@@ -349,30 +389,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         resultUser = updatedUser;
-        // Kirim langsung otomatis ke Supabase
+        // Kirim langsung otomatis ke Supabase (user_accounts & profiles)
         syncProfileToSupabase(updatedUser);
         return next;
       } else {
-        // Buat akun baru berbasis email
+        // Buat akun baru berbasis username
         const rawName = student.parentName
           .toLowerCase()
           .replace(/^(ibu|bapak|pak|bu)\s+/i, '')
           .replace(/[^a-z0-9]/g, '');
 
-        let targetEmail = customCreds?.email?.trim().toLowerCase();
-        if (!targetEmail) {
-          targetEmail = `wali_${rawName || 'siswa'}@littlestar.id`;
+        let targetUsername = customCreds?.username?.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+        if (!targetUsername) {
+          targetUsername = `wali_${rawName || 'siswa'}`;
           let count = 1;
-          while (prevUsers.some((u) => u.email.toLowerCase() === targetEmail)) {
-            targetEmail = `wali_${rawName || 'siswa'}${count++}@littlestar.id`;
+          while (prevUsers.some((u) => u.username.toLowerCase() === targetUsername)) {
+            targetUsername = `wali_${rawName || 'siswa'}${count++}`;
           }
         }
 
         const newUserId = ensureUuid(student.parentUserId);
         const newUser: UserProfile & { password?: string } = {
           id: newUserId,
-          email: targetEmail,
-          username: targetEmail,
+          username: targetUsername,
           fullName: student.parentName,
           role: 'wali',
           status: student.accountStatus,
@@ -383,7 +422,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         resultUser = newUser;
-        // Kirim langsung otomatis ke Supabase
+        // Kirim langsung otomatis ke Supabase (user_accounts & profiles)
         syncProfileToSupabase(newUser);
         return [...prevUsers, newUser];
       }
@@ -392,10 +431,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return resultUser;
   };
 
-  // Otomatis pembuatan & sinkronisasi akun Guru/Pegawai berbasis EMAIL
+  // Otomatis pembuatan & sinkronisasi akun Guru/Pegawai berbasis USERNAME
   const syncTeacherAccount = (
     teacher: Teacher,
-    customCreds?: { email?: string; password?: string; role?: UserRole; position?: string }
+    customCreds?: { username?: string; password?: string; role?: UserRole; position?: string }
   ): UserProfile => {
     let resultUser: UserProfile = { ...teacher } as any;
 
@@ -421,7 +460,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingIndex = prevUsers.findIndex(
         (u) =>
           (teacher.userId && u.id === teacher.userId) ||
-          (customCreds?.email && u.email && u.email.toLowerCase() === customCreds.email.toLowerCase().trim()) ||
+          (customCreds?.username && u.username && u.username.toLowerCase() === customCreds.username.toLowerCase().trim()) ||
           (u.teacherId && u.teacherId === teacher.id) ||
           (u.phone && teacher.phone && u.phone === teacher.phone) ||
           (u.fullName.toLowerCase() === teacher.name.toLowerCase() &&
@@ -430,15 +469,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (existingIndex >= 0) {
         const existing = prevUsers[existingIndex];
-        let targetEmail = existing.email;
-        if (customCreds?.email && customCreds.email.trim()) {
-          targetEmail = customCreds.email.trim().toLowerCase();
+        let targetUsername = existing.username;
+        if (customCreds?.username && customCreds.username.trim()) {
+          targetUsername = customCreds.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
         }
 
         const updatedUser: UserProfile & { password?: string } = {
           ...existing,
-          email: targetEmail,
-          username: targetEmail,
+          username: targetUsername,
           fullName: teacher.name,
           phone: teacher.phone || existing.phone,
           role: assignedRole,
@@ -457,7 +495,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         resultUser = updatedUser;
-        // Kirim langsung otomatis ke Supabase
+        // Kirim langsung otomatis ke Supabase (user_accounts & profiles)
         syncProfileToSupabase(updatedUser);
         return next;
       } else {
@@ -468,20 +506,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const prefix =
           assignedRole === 'kepala' ? 'kpl_' : assignedRole === 'admin' ? 'adm_' : 'guru_';
 
-        let targetEmail = customCreds?.email?.trim().toLowerCase();
-        if (!targetEmail) {
-          targetEmail = `${prefix}${cleanName || 'terapis'}@littlestar.id`;
+        let targetUsername = customCreds?.username?.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+        if (!targetUsername) {
+          targetUsername = `${prefix}${cleanName || 'terapis'}`;
           let count = 1;
-          while (prevUsers.some((u) => u.email.toLowerCase() === targetEmail)) {
-            targetEmail = `${prefix}${cleanName || 'terapis'}${count++}@littlestar.id`;
+          while (prevUsers.some((u) => u.username.toLowerCase() === targetUsername)) {
+            targetUsername = `${prefix}${cleanName || 'terapis'}${count++}`;
           }
         }
 
         const newUserId = ensureUuid(teacher.userId);
         const newUser: UserProfile & { password?: string } = {
           id: newUserId,
-          email: targetEmail,
-          username: targetEmail,
+          username: targetUsername,
           fullName: teacher.name,
           role: assignedRole,
           position: assignedPosition,
@@ -492,7 +529,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         resultUser = newUser;
-        // Kirim langsung otomatis ke Supabase
+        // Kirim langsung otomatis ke Supabase (user_accounts & profiles)
         syncProfileToSupabase(newUser);
         return [...prevUsers, newUser];
       }

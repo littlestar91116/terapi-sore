@@ -72,6 +72,22 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status account_status DEFAU
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (LOWER(email)) WHERE email IS NOT NULL;
 
+-- 3B. TABEL USER ACCOUNTS (KREDENSIAL LOGIN USERNAME & PASSWORD TANPA EMAIL)
+CREATE TABLE IF NOT EXISTS public.user_accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL DEFAULT '123',
+    full_name TEXT NOT NULL,
+    role user_role NOT NULL DEFAULT 'wali',
+    position TEXT,
+    status account_status NOT NULL DEFAULT 'aktif',
+    phone TEXT,
+    user_id UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_accounts_username ON public.user_accounts (LOWER(username));
+
 -- 4. TABEL PAKET TERAPI (MASTER DATA)
 CREATE TABLE IF NOT EXISTS public.packages (
     id TEXT PRIMARY KEY,
@@ -272,6 +288,15 @@ DROP POLICY IF EXISTS "Admin & Kepala punya akses penuh ke profiles" ON public.p
 DROP POLICY IF EXISTS "User bisa melihat profil sendiri" ON public.profiles;
 CREATE POLICY "Akses profiles aplikasi"
     ON public.profiles FOR ALL
+    TO anon, authenticated
+    USING (true)
+    WITH CHECK (true);
+
+-- 1B. USER_ACCOUNTS RLS (Kredensial Login Username & Password)
+ALTER TABLE public.user_accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Akses user_accounts aplikasi" ON public.user_accounts;
+CREATE POLICY "Akses user_accounts aplikasi"
+    ON public.user_accounts FOR ALL
     TO anon, authenticated
     USING (true)
     WITH CHECK (true);
@@ -501,6 +526,23 @@ ON CONFLICT (id) DO UPDATE SET
     status = EXCLUDED.status,
     phone = EXCLUDED.phone,
     email = EXCLUDED.email;
+
+-- Seed Akun Login Username & Password (public.user_accounts)
+INSERT INTO public.user_accounts (id, username, password, full_name, role, position, status, phone, user_id) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'admin', '12345', 'Administrator Utama', 'admin', 'Administrator Lembaga', 'aktif', '081234567890', '00000000-0000-0000-0000-000000000001'),
+    ('00000000-0000-0000-0000-000000000002', 'kepala', '123', 'Hj. Fatimah, S.Psi, M.Ed', 'kepala', 'Kepala Lembaga', 'aktif', '081234567891', '00000000-0000-0000-0000-000000000002'),
+    ('00000000-0000-0000-0000-000000000003', 'guru', '123', 'Siti Rahmawati, S.Tr.Kes', 'guru', 'Terapis Wicara', 'aktif', '081234567892', '00000000-0000-0000-0000-000000000003'),
+    ('00000000-0000-0000-0000-000000000004', 'budi', '123', 'Budi Santoso, S.Pd', 'guru', 'Terapis Okupasi', 'aktif', '081234567893', '00000000-0000-0000-0000-000000000004'),
+    ('00000000-0000-0000-0000-000000000005', 'wali', '123', 'Ibu Ratna Dewi', 'wali', 'Wali Murid', 'aktif', '081298765432', '00000000-0000-0000-0000-000000000005'),
+    ('00000000-0000-0000-0000-000000000006', 'wali_beku', '123', 'Bapak Hendra Gunawan', 'wali', 'Wali Murid', 'dibekukan', '081298765433', '00000000-0000-0000-0000-000000000006')
+ON CONFLICT (username) DO UPDATE SET
+    password = EXCLUDED.password,
+    full_name = EXCLUDED.full_name,
+    role = EXCLUDED.role,
+    position = EXCLUDED.position,
+    status = EXCLUDED.status,
+    phone = EXCLUDED.phone,
+    user_id = EXCLUDED.user_id;
 
 -- Seed Guru Awal
 INSERT INTO public.teachers (id, user_id, name, position, role, phone, address, join_date, status, salary_system, hourly_rate, monthly_salary) VALUES

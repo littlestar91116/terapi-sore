@@ -35,11 +35,11 @@ export const GuruView: React.FC = () => {
 
   // Auto Account Creation State
   const [autoCreateAccount, setAutoCreateAccount] = useState(true);
-  const [teacherEmail, setTeacherEmail] = useState('');
+  const [teacherUsername, setTeacherUsername] = useState('');
   const [teacherPassword, setTeacherPassword] = useState('123');
   const [accountAlert, setAccountAlert] = useState<{
     teacherName: string;
-    email: string;
+    username: string;
     password?: string;
     position?: string;
     role: UserRole;
@@ -88,18 +88,21 @@ export const GuruView: React.FC = () => {
       role: deducedRole,
     }));
 
-    // Update email suggestion jika baru
+    // Update username suggestion jika baru
     if (!editingTeacher && formData.name) {
-      const clean = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
-      setTeacherEmail(`${clean || 'staf'}@littlestar.id`);
+      const clean = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+      const prefix = deducedRole === 'kepala' ? 'kpl_' : deducedRole === 'admin' ? 'adm_' : 'guru_';
+      setTeacherUsername(`${prefix}${clean || 'staf'}`);
     }
   };
 
   const handleNameChange = (val: string) => {
     setFormData((prev) => ({ ...prev, name: val }));
     if (!editingTeacher) {
-      const clean = val.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15);
-      setTeacherEmail(clean ? `${clean}@littlestar.id` : '');
+      const clean = val.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+      const prefix =
+        formData.role === 'kepala' ? 'kpl_' : formData.role === 'admin' ? 'adm_' : 'guru_';
+      setTeacherUsername(clean ? `${prefix}${clean}` : '');
     }
   };
 
@@ -118,7 +121,7 @@ export const GuruView: React.FC = () => {
       role: 'guru',
     });
     setAutoCreateAccount(true);
-    setTeacherEmail('');
+    setTeacherUsername('');
     setTeacherPassword('123');
     setIsModalOpen(true);
   };
@@ -151,7 +154,7 @@ export const GuruView: React.FC = () => {
     );
 
     setAutoCreateAccount(true);
-    setTeacherEmail(linkedUser?.email || '');
+    setTeacherUsername(linkedUser?.username || '');
     setTeacherPassword(linkedUser?.password || '123');
     setIsModalOpen(true);
   };
@@ -168,7 +171,7 @@ export const GuruView: React.FC = () => {
 
       if (autoCreateAccount) {
         const synced = syncTeacherAccount(updatedTeacher, {
-          email: teacherEmail,
+          username: teacherUsername,
           password: teacherPassword,
           role: formData.role,
           position: formData.position,
@@ -176,7 +179,7 @@ export const GuruView: React.FC = () => {
         updatedTeacher.userId = synced.id;
         setAccountAlert({
           teacherName: updatedTeacher.name,
-          email: synced.email,
+          username: synced.username,
           password: teacherPassword || '123',
           position: formData.position,
           role: formData.role,
@@ -194,7 +197,7 @@ export const GuruView: React.FC = () => {
 
       if (autoCreateAccount) {
         const synced = syncTeacherAccount(newTeacher, {
-          email: teacherEmail,
+          username: teacherUsername,
           password: teacherPassword,
           role: formData.role,
           position: formData.position,
@@ -202,7 +205,7 @@ export const GuruView: React.FC = () => {
         newTeacher.userId = synced.id;
         setAccountAlert({
           teacherName: newTeacher.name,
-          email: synced.email,
+          username: synced.username,
           password: teacherPassword || '123',
           position: formData.position,
           role: formData.role,
@@ -267,7 +270,7 @@ export const GuruView: React.FC = () => {
               </p>
               <div className="inline-flex items-center gap-3 bg-white px-3 py-1.5 rounded-lg border border-emerald-200 font-mono text-xs text-slate-800 mt-1">
                 <span>
-                  Email Login: <strong className="text-emerald-700">{accountAlert.email}</strong>
+                  Username: <strong className="text-emerald-700">@{accountAlert.username}</strong>
                 </span>
                 <span>•</span>
                 <span>
@@ -500,14 +503,14 @@ export const GuruView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-3xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
-                    Email Pengguna (Login) *
+                    Username Pengguna (Login) *
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required={autoCreateAccount}
-                    value={teacherEmail}
-                    onChange={(e) => setTeacherEmail(e.target.value)}
-                    placeholder="Contoh: guru.siti@littlestar.id"
+                    value={teacherUsername}
+                    onChange={(e) => setTeacherUsername(e.target.value)}
+                    placeholder="Contoh: guru_siti"
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium text-slate-900"
                   />
                 </div>

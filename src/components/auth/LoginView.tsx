@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import {
   Lock,
-  Mail,
+  User,
   ArrowRight,
   Database,
   Eye,
   EyeOff,
-  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -17,7 +16,7 @@ interface LoginViewProps {
 
 export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +24,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
-      setError('Silakan masukkan alamat email akun Anda.');
+    if (!username.trim()) {
+      setError('Silakan masukkan username akun Anda.');
       return;
     }
     if (!password) {
@@ -37,9 +36,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
     setError(null);
     setLoading(true);
 
-    const res = await login(email.trim(), password);
+    const res = await login(username.trim(), password);
     if (!res.success) {
-      setError(res.message || 'Email atau kata sandi yang Anda masukkan tidak sesuai.');
+      setError(res.message || 'Username atau kata sandi yang Anda masukkan tidak sesuai.');
     }
     setLoading(false);
   };
@@ -66,30 +65,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
           </p>
         </div>
 
-        {/* Form Login Resmi Berbasis Email */}
+        {/* Form Login Resmi Berbasis Username */}
         <div className="p-6 sm:p-8 space-y-6">
           <div className="text-center space-y-1">
             <h2 className="text-base font-bold text-slate-900">Masuk ke Akun Anda</h2>
             <p className="text-xs text-slate-500">
-              Gunakan alamat email terdaftar dan kata sandi Anda
+              Gunakan username terdaftar dan kata sandi Anda
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Alamat Email Akun *
+                Username Akun *
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   autoFocus
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Contoh: admin@littlestar.id atau wali@gmail.com"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Contoh: admin, kepala, guru, wali"
                   className="w-full pl-10 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition-all text-slate-900 font-medium"
                 />
               </div>
@@ -132,7 +131,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
               disabled={loading}
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 mt-2"
             >
-              <span>{loading ? 'Memverifikasi Email & Sandi...' : 'Masuk ke Sistem'}</span>
+              <span>{loading ? 'Memverifikasi Akun...' : 'Masuk ke Sistem'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
