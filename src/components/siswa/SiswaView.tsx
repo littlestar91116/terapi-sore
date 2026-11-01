@@ -60,12 +60,12 @@ export const SiswaView: React.FC = () => {
 
   // Auto Account Creation State
   const [autoCreateAccount, setAutoCreateAccount] = useState(true);
-  const [parentUsername, setParentUsername] = useState('');
+  const [parentEmail, setParentEmail] = useState('');
   const [parentPassword, setParentPassword] = useState('123');
   const [accountAlert, setAccountAlert] = useState<{
     studentName: string;
     parentName: string;
-    username: string;
+    email: string;
     password?: string;
     isEdit: boolean;
   } | null>(null);
@@ -121,7 +121,7 @@ export const SiswaView: React.FC = () => {
       saldoJam: 0,
     });
     setAutoCreateAccount(true);
-    setParentUsername('');
+    setParentEmail('');
     setParentPassword('123');
     setSelectedDaysConfig([]);
     setScheduleError(null);
@@ -151,7 +151,7 @@ export const SiswaView: React.FC = () => {
     );
 
     setAutoCreateAccount(true);
-    setParentUsername(linkedUser?.username || '');
+    setParentEmail(linkedUser?.email || '');
     setParentPassword(linkedUser?.password || '123');
 
     // Cek apakah siswa sudah memiliki jadwal di bulan aktif
@@ -175,7 +175,7 @@ export const SiswaView: React.FC = () => {
         .toLowerCase()
         .replace(/^(ibu|bapak|pak|bu)\s+/i, '')
         .replace(/[^a-z0-9]/g, '');
-      setParentUsername(clean ? `wali_${clean}` : '');
+      setParentEmail(clean ? `${clean}@gmail.com` : '');
     }
   };
 
@@ -238,14 +238,14 @@ export const SiswaView: React.FC = () => {
 
       if (autoCreateAccount) {
         const synced = syncStudentParentAccount(updatedStudent, {
-          username: parentUsername,
+          email: parentEmail,
           password: parentPassword,
         });
         updatedStudent.parentUserId = synced.id;
         setAccountAlert({
           studentName: updatedStudent.name,
           parentName: updatedStudent.parentName,
-          username: synced.username,
+          email: synced.email,
           password: parentPassword || '123',
           isEdit: true,
         });
@@ -261,14 +261,14 @@ export const SiswaView: React.FC = () => {
 
       if (autoCreateAccount) {
         const synced = syncStudentParentAccount(newStudent, {
-          username: parentUsername,
+          email: parentEmail,
           password: parentPassword,
         });
         newStudent.parentUserId = synced.id;
         setAccountAlert({
           studentName: newStudent.name,
           parentName: newStudent.parentName,
-          username: synced.username,
+          email: synced.email,
           password: parentPassword || '123',
           isEdit: false,
         });
@@ -352,7 +352,7 @@ export const SiswaView: React.FC = () => {
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 bg-white/80 px-3 py-1.5 rounded-xl border border-emerald-300/80 text-xs text-slate-800">
                 <span>
-                  Username: <strong className="font-mono text-emerald-800">@{accountAlert.username}</strong>
+                  Email Login: <strong className="font-mono text-emerald-800">{accountAlert.email}</strong>
                 </span>
                 <span>•</span>
                 <span>
@@ -658,14 +658,14 @@ export const SiswaView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-3xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
-                    Username Wali Murid *
+                    Email Wali Murid (Login) *
                   </label>
                   <input
-                    type="text"
+                    type="email"
                     required={autoCreateAccount}
-                    value={parentUsername}
-                    onChange={(e) => setParentUsername(e.target.value)}
-                    placeholder="Contoh: wali_alif"
+                    value={parentEmail}
+                    onChange={(e) => setParentEmail(e.target.value)}
+                    placeholder="Contoh: ratna@gmail.com"
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium text-slate-900"
                   />
                 </div>

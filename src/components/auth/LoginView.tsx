@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Sparkles,
   Lock,
-  User,
+  Mail,
   ArrowRight,
   Database,
   Eye,
@@ -18,7 +17,7 @@ interface LoginViewProps {
 
 export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => {
   const { login } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,21 +25,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-      setError('Silakan masukkan username Anda.');
+    if (!email.trim()) {
+      setError('Silakan masukkan alamat email akun Anda.');
       return;
     }
     if (!password) {
-      setError('Silakan masukkan password Anda.');
+      setError('Silakan masukkan kata sandi (password) Anda.');
       return;
     }
 
     setError(null);
     setLoading(true);
 
-    const res = await login(username.trim(), password);
+    const res = await login(email.trim(), password);
     if (!res.success) {
-      setError(res.message || 'Username atau password yang Anda masukkan salah.');
+      setError(res.message || 'Email atau kata sandi yang Anda masukkan tidak sesuai.');
     }
     setLoading(false);
   };
@@ -67,41 +66,41 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
           </p>
         </div>
 
-        {/* Form Login Resmi */}
+        {/* Form Login Resmi Berbasis Email */}
         <div className="p-6 sm:p-8 space-y-6">
           <div className="text-center space-y-1">
             <h2 className="text-base font-bold text-slate-900">Masuk ke Akun Anda</h2>
             <p className="text-xs text-slate-500">
-              Silakan masukkan kredensial akun yang telah terdaftar
+              Gunakan alamat email terdaftar dan kata sandi Anda
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Username / ID Pengguna
+                Alamat Email Akun *
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
-                  type="text"
+                  type="email"
                   required
                   autoFocus
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Masukkan username..."
-                  className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition-all text-slate-900 font-medium"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Contoh: admin@littlestar.id atau wali@gmail.com"
+                  className="w-full pl-10 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition-all text-slate-900 font-medium"
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-2xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Kata Sandi (Password)
+                Kata Sandi (Password) *
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
@@ -109,7 +108,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan kata sandi..."
-                  className="w-full pl-9 pr-10 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition-all text-slate-900 font-medium"
+                  className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition-all text-slate-900 font-medium"
                 />
                 <button
                   type="button"
@@ -133,7 +132,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
               disabled={loading}
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 mt-2"
             >
-              <span>{loading ? 'Memverifikasi Akun...' : 'Masuk ke Sistem'}</span>
+              <span>{loading ? 'Memverifikasi Email & Sandi...' : 'Masuk ke Sistem'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
@@ -141,7 +140,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
           {/* Bantuan & Informasi Kontak */}
           <div className="pt-4 border-t border-slate-100 text-center space-y-3">
             <p className="text-2xs text-slate-500">
-              Lupa kata sandi atau butuh akses akun baru?
+              Belum memiliki akun atau lupa kata sandi?
               <br />
               Silakan hubungi bagian <strong>Administrasi {APP_CONFIG.name}</strong>.
             </p>
@@ -158,11 +157,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenSupabaseGuide }) => 
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Footer Info */}
-      <div className="mt-6 text-center text-3xs text-slate-500">
-        © 2026 {APP_CONFIG.name} • Seluruh hak cipta dilindungi.
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ interface AuthContextType {
   currentUser: UserProfile | null;
   currentRole: UserRole;
   isFrozen: boolean;
-  login: (username: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   switchRole: (role: UserRole, accountStatus?: 'aktif' | 'dibekukan') => void;
   hasPermission: (module: AppModule, action: 'view' | 'add' | 'edit' | 'delete') => boolean;
@@ -27,11 +27,11 @@ interface AuthContextType {
   // Auto-sync for Student and Teacher
   syncStudentParentAccount: (
     student: Student,
-    customCreds?: { username?: string; password?: string }
+    customCreds?: { email?: string; password?: string }
   ) => UserProfile;
   syncTeacherAccount: (
     teacher: Teacher,
-    customCreds?: { username?: string; password?: string; role?: UserRole; position?: string }
+    customCreds?: { email?: string; password?: string; role?: UserRole; position?: string }
   ) => UserProfile;
   syncFreezeStudent: (studentId: string, freeze: boolean) => void;
 }
@@ -39,7 +39,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_USER_KEY = 'terapi_current_user';
-const LOCAL_STORAGE_USERS_LIST_KEY = 'terapi_all_users_v2';
+const LOCAL_STORAGE_USERS_LIST_KEY = 'terapi_all_users_v3';
 const LOCAL_STORAGE_PERMS_KEY = 'terapi_role_permissions';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -66,7 +66,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
     }
-    // Tampilan awal web selalu ke halaman login
     return null;
   });
 
@@ -106,7 +105,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const merged = [...prev];
           for (const remote of remoteProfiles) {
             const idx = merged.findIndex(
-              (m) => m.username.toLowerCase() === remote.username.toLowerCase()
+              (m) =>
+                (m.email && remote.email && m.email.toLowerCase() === remote.email.toLowerCase()) ||
+                (m.id && remote.id && m.id === remote.id)
             );
             if (idx >= 0) {
               merged[idx] = { ...merged[idx], ...remote };
@@ -123,27 +124,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentRole: UserRole = currentUser?.role || 'wali';
   const isFrozen: boolean = currentUser?.status === 'dibekukan';
 
-  const login = async (username: string, password = ''): Promise<{ success: boolean; message?: string }> => {
+  // Login menggunakan EMAIL
+  const login = async (emailInput: string, password = ''): Promise<{ success: boolean; message?: string }> => {
     const supabase = getSupabase();
+    const cleanEmail = emailInput.trim().toLowerCase();
 
-    // Cek database Supabase jika aktif
+    // 1. Cek database Supabase terlebih dahulu jika aktif
     if (supabase) {
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('username', username.trim())
+          .or(`email.ilike.${cleanEmail},username.ilike.${cleanEmail}`)
           .single();
 
         if (!error && data) {
+          if (data.password && password && data.password !== password) {
+            return {
+              success: false,
+              message: 'Password salah. Silakan periksa kembali kata sandi Anda.',
+            };
+          }
+          if (data.status === 'nonaktif') {
+            return {
+              success: false,
+              message: 'Akun Anda sedang dinonaktifkan oleh administrator.',
+            };
+          }
+
           const userObj: UserProfile = {
             id: data.id,
-            username: data.username,
+            email: data.email || cleanEmail,
+            username: data.username || data.email,
             fullName: data.full_name,
             role: data.role as UserRole,
             status: data.status as 'aktif' | 'dibekukan' | 'nonaktif',
             phone: data.phone,
-            email: data.email,
             position: data.position,
           };
           setCurrentUser(userObj);
@@ -154,10 +170,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Cek dari daftar akun dinamis (users)
-    const targetUsername = username.trim().toLowerCase();
+    // 2. Cek dari daftar akun dinamis lokal (users)
     const matched = users.find(
-      (u) => u.username.toLowerCase() === targetUsername
+      (u) =>
+        (u.email && u.email.toLowerCase() === cleanEmail) ||
+        (u.username && u.username.toLowerCase() === cleanEmail)
     );
 
     if (matched) {
@@ -180,7 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return {
       success: false,
-      message: 'Username tidak ditemukan. Silakan periksa kembali atau hubungi Administrator Little Star Learning Center.',
+      message: 'Email tidak ditemukan. Pastikan email yang Anda masukkan sudah terdaftar di sistem Little Star Learning Center.',
     };
   };
 
@@ -189,9 +206,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchRole = (role: UserRole, accountStatus: 'aktif' | 'dibekukan' = 'aktif') => {
-    const userForRole = users.find(
-      (u) => u.role === role && (accountStatus === 'dibekukan' ? u.status === 'dibekukan' : u.status === 'aktif')
-    ) || users.find((u) => u.role === role) || users[0];
+    const userForRole =
+      users.find(
+        (u) =>
+          u.role === role &&
+          (accountStatus === 'dibekukan' ? u.status === 'dibekukan' : u.status === 'aktif')
+      ) ||
+      users.find((u) => u.role === role) ||
+      users[0];
 
     const { password: _, ...safeUser } = userForRole;
     setCurrentUser({
@@ -201,15 +223,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasPermission = (module: AppModule, action: 'view' | 'add' | 'edit' | 'delete'): boolean => {
-    // Admin selalu punya akses penuh
     if (currentRole === 'admin') return true;
 
-    // Jika akun dibekukan, wali tidak boleh akses modul operasional
     if (isFrozen && currentRole === 'wali') {
       return false;
     }
 
-    // Peran selain admin dilarang mengakses modul hak_akses
     if (module === 'hak_akses') {
       return false;
     }
@@ -235,11 +254,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(newPermissions);
   };
 
-  // Direct Account Management
+  // Direct Account Management (Berbasis Email)
   const addUserAccount = (user: UserProfile & { password?: string }) => {
-    const validUser = { ...user, id: ensureUuid(user.id) };
+    const cleanEmail = (user.email || 'user@littlestar.id').trim().toLowerCase();
+    const validUser = {
+      ...user,
+      id: ensureUuid(user.id),
+      email: cleanEmail,
+      username: cleanEmail,
+    };
     setUsers((prev) => [...prev, validUser]);
-    // Kirim langsung ke Supabase
+    // Kirim langsung otomatis ke Supabase
     syncProfileToSupabase(validUser);
   };
 
@@ -247,12 +272,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === user.id) {
-          const updated = { ...u, ...user };
+          const cleanEmail = (user.email || u.email).trim().toLowerCase();
+          const updated = {
+            ...u,
+            ...user,
+            email: cleanEmail,
+            username: cleanEmail,
+          };
           if (currentUser?.id === user.id) {
             const { password: _, ...safe } = updated;
             setCurrentUser(safe);
           }
-          // Kirim update ke Supabase
+          // Kirim langsung otomatis ke Supabase
           syncProfileToSupabase(updated);
           return updated;
         }
@@ -265,22 +296,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = users.find((u) => u.id === userId);
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     if (target) {
-      deleteProfileFromSupabase(target.username);
+      deleteProfileFromSupabase(target.email || target.id);
     }
   };
 
-  // Otomatis sinkronisasi akun Wali Murid saat data siswa dibuat atau diedit
+  // Otomatis pembuatan & sinkronisasi akun Wali Murid berbasis EMAIL
   const syncStudentParentAccount = (
     student: Student,
-    customCreds?: { username?: string; password?: string }
+    customCreds?: { email?: string; password?: string }
   ): UserProfile => {
     let resultUser: UserProfile = { ...student } as any;
 
     setUsers((prevUsers) => {
-      // Cari apakah sudah ada akun wali terkait
+      // Cari apakah sudah ada akun wali terkait berdasarkan ID, nomor HP, atau nama
       const existingIndex = prevUsers.findIndex(
         (u) =>
           (student.parentUserId && u.id === student.parentUserId) ||
+          (customCreds?.email && u.email && u.email.toLowerCase() === customCreds.email.toLowerCase().trim()) ||
           (u.phone && student.parentPhone && u.phone === student.parentPhone) ||
           (u.role === 'wali' && u.fullName.toLowerCase() === student.parentName.toLowerCase())
       );
@@ -291,17 +323,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           new Set([...(existing.studentIds || []), student.id])
         );
 
-        let targetUsername = existing.username;
-        if (customCreds?.username && customCreds.username.trim()) {
-          targetUsername = customCreds.username.trim().toLowerCase();
+        let targetEmail = existing.email;
+        if (customCreds?.email && customCreds.email.trim()) {
+          targetEmail = customCreds.email.trim().toLowerCase();
         }
 
         const updatedUser: UserProfile & { password?: string } = {
           ...existing,
-          username: targetUsername,
+          email: targetEmail,
+          username: targetEmail,
           fullName: student.parentName,
           phone: student.parentPhone || existing.phone,
-          status: student.accountStatus, // Sinkron status aktif / dibekukan
+          status: student.accountStatus,
           position: 'Wali Murid',
           studentIds: updatedStudentIds,
           password: customCreds?.password || existing.password || '123',
@@ -316,41 +349,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         resultUser = updatedUser;
-        // Kirim langsung ke Supabase
+        // Kirim langsung otomatis ke Supabase
         syncProfileToSupabase(updatedUser);
         return next;
       } else {
-        // Buat akun baru otomatis
+        // Buat akun baru berbasis email
         const rawName = student.parentName
           .toLowerCase()
           .replace(/^(ibu|bapak|pak|bu)\s+/i, '')
           .replace(/[^a-z0-9]/g, '');
-        const baseUsername =
-          customCreds?.username?.trim().toLowerCase() ||
-          `wali_${rawName || 'siswa'}`;
 
-        let finalUsername = baseUsername;
-        let count = 1;
-        while (prevUsers.some((u) => u.username.toLowerCase() === finalUsername)) {
-          finalUsername = `${baseUsername}${count++}`;
+        let targetEmail = customCreds?.email?.trim().toLowerCase();
+        if (!targetEmail) {
+          targetEmail = `wali_${rawName || 'siswa'}@littlestar.id`;
+          let count = 1;
+          while (prevUsers.some((u) => u.email.toLowerCase() === targetEmail)) {
+            targetEmail = `wali_${rawName || 'siswa'}${count++}@littlestar.id`;
+          }
         }
 
         const newUserId = ensureUuid(student.parentUserId);
         const newUser: UserProfile & { password?: string } = {
           id: newUserId,
-          username: finalUsername,
+          email: targetEmail,
+          username: targetEmail,
           fullName: student.parentName,
           role: 'wali',
           status: student.accountStatus,
           phone: student.parentPhone,
-          email: `${finalUsername}@wali.littlestar.id`,
           position: 'Wali Murid',
           studentIds: [student.id],
           password: customCreds?.password || '123',
         };
 
         resultUser = newUser;
-        // Kirim langsung ke Supabase
+        // Kirim langsung otomatis ke Supabase
         syncProfileToSupabase(newUser);
         return [...prevUsers, newUser];
       }
@@ -359,10 +392,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return resultUser;
   };
 
-  // Otomatis sinkronisasi akun Guru/Pegawai saat data guru dibuat atau diedit (dengan jabatan)
+  // Otomatis pembuatan & sinkronisasi akun Guru/Pegawai berbasis EMAIL
   const syncTeacherAccount = (
     teacher: Teacher,
-    customCreds?: { username?: string; password?: string; role?: UserRole; position?: string }
+    customCreds?: { email?: string; password?: string; role?: UserRole; position?: string }
   ): UserProfile => {
     let resultUser: UserProfile = { ...teacher } as any;
 
@@ -388,6 +421,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingIndex = prevUsers.findIndex(
         (u) =>
           (teacher.userId && u.id === teacher.userId) ||
+          (customCreds?.email && u.email && u.email.toLowerCase() === customCreds.email.toLowerCase().trim()) ||
           (u.teacherId && u.teacherId === teacher.id) ||
           (u.phone && teacher.phone && u.phone === teacher.phone) ||
           (u.fullName.toLowerCase() === teacher.name.toLowerCase() &&
@@ -396,14 +430,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (existingIndex >= 0) {
         const existing = prevUsers[existingIndex];
-        let targetUsername = existing.username;
-        if (customCreds?.username && customCreds.username.trim()) {
-          targetUsername = customCreds.username.trim().toLowerCase();
+        let targetEmail = existing.email;
+        if (customCreds?.email && customCreds.email.trim()) {
+          targetEmail = customCreds.email.trim().toLowerCase();
         }
 
         const updatedUser: UserProfile & { password?: string } = {
           ...existing,
-          username: targetUsername,
+          email: targetEmail,
+          username: targetEmail,
           fullName: teacher.name,
           phone: teacher.phone || existing.phone,
           role: assignedRole,
@@ -422,7 +457,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         resultUser = updatedUser;
-        // Kirim langsung ke Supabase
+        // Kirim langsung otomatis ke Supabase
         syncProfileToSupabase(updatedUser);
         return next;
       } else {
@@ -432,31 +467,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .slice(0, 10);
         const prefix =
           assignedRole === 'kepala' ? 'kpl_' : assignedRole === 'admin' ? 'adm_' : 'guru_';
-        const baseUsername =
-          customCreds?.username?.trim().toLowerCase() || `${prefix}${cleanName || 'terapis'}`;
 
-        let finalUsername = baseUsername;
-        let count = 1;
-        while (prevUsers.some((u) => u.username.toLowerCase() === finalUsername)) {
-          finalUsername = `${baseUsername}${count++}`;
+        let targetEmail = customCreds?.email?.trim().toLowerCase();
+        if (!targetEmail) {
+          targetEmail = `${prefix}${cleanName || 'terapis'}@littlestar.id`;
+          let count = 1;
+          while (prevUsers.some((u) => u.email.toLowerCase() === targetEmail)) {
+            targetEmail = `${prefix}${cleanName || 'terapis'}${count++}@littlestar.id`;
+          }
         }
 
         const newUserId = ensureUuid(teacher.userId);
         const newUser: UserProfile & { password?: string } = {
           id: newUserId,
-          username: finalUsername,
+          email: targetEmail,
+          username: targetEmail,
           fullName: teacher.name,
           role: assignedRole,
           position: assignedPosition,
           status: teacher.status === 'cuti' ? 'nonaktif' : teacher.status,
           phone: teacher.phone,
-          email: `${finalUsername}@littlestar.id`,
           teacherId: teacher.id,
           password: customCreds?.password || '123',
         };
 
         resultUser = newUser;
-        // Kirim langsung ke Supabase
+        // Kirim langsung otomatis ke Supabase
         syncProfileToSupabase(newUser);
         return [...prevUsers, newUser];
       }

@@ -155,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobil
               <p className="text-xs font-semibold text-slate-800 leading-none">
                 {currentUser?.fullName}
               </p>
-              <p className="text-2xs text-slate-500 mt-0.5">@{currentUser?.username}</p>
+              <p className="text-2xs text-slate-500 mt-0.5">{currentUser?.email || currentUser?.username}</p>
             </div>
             <button
               onClick={logout}

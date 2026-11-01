@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS position TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT DEFAULT '123';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status account_status DEFAULT 'aktif';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (LOWER(email)) WHERE email IS NOT NULL;
 
 -- 4. TABEL PAKET TERAPI (MASTER DATA)
 CREATE TABLE IF NOT EXISTS public.packages (
