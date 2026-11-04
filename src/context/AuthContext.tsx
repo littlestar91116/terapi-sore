@@ -7,6 +7,8 @@ import {
   syncProfileToSupabase,
   deleteProfileFromSupabase,
   fetchProfilesFromSupabase,
+  syncRolePermissionsToSupabase,
+  fetchRolePermissionsFromSupabase,
 } from '../lib/supabaseSync';
 
 interface AuthContextType {
@@ -97,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(LOCAL_STORAGE_PERMS_KEY, JSON.stringify(permissions));
   }, [permissions]);
 
-  // Muat akun dari Supabase saat aplikasi dibuka jika Supabase terhubung
+  // Muat akun & hak akses dari Supabase saat aplikasi dibuka jika Supabase terhubung
   useEffect(() => {
     fetchProfilesFromSupabase().then((remoteProfiles) => {
       if (remoteProfiles && remoteProfiles.length > 0) {
@@ -106,6 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           for (const remote of remoteProfiles) {
             const idx = merged.findIndex(
               (m) =>
+                (m.username && remote.username && m.username.toLowerCase() === remote.username.toLowerCase()) ||
                 (m.email && remote.email && m.email.toLowerCase() === remote.email.toLowerCase()) ||
                 (m.id && remote.id && m.id === remote.id)
             );
@@ -117,6 +120,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return merged;
         });
+      }
+    });
+
+    fetchRolePermissionsFromSupabase().then((remotePerms) => {
+      if (remotePerms && remotePerms.length > 0) {
+        setPermissions(remotePerms);
       }
     });
   }, []);
@@ -287,6 +296,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updatePermissions = (newPermissions: RolePermission[]) => {
     setPermissions(newPermissions);
+    syncRolePermissionsToSupabase(newPermissions);
   };
 
   // Direct Account Management (Berbasis Username)

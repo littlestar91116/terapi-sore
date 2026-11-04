@@ -95,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobil
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
               syncStatus.status === 'syncing'
                 ? 'bg-amber-50 text-amber-800 border-amber-300 animate-pulse'
-                : syncStatus.status === 'saved'
+                : syncStatus.status === 'saved' || (syncStatus.autoSyncEnabled && syncStatus.status !== 'error' && syncStatus.status !== 'unconfigured')
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
                 : syncStatus.status === 'error'
                 ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
@@ -103,15 +103,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobil
             }`}
             title={
               syncStatus.status === 'syncing'
-                ? 'Sedang menyimpan perubahan data ke database Supabase secara otomatis...'
-                : syncStatus.status === 'saved'
-                ? `Tersimpan otomatis ke Supabase. ${
-                    syncStatus.lastSavedAt
-                      ? `Terakhir disimpan pukul ${syncStatus.lastSavedAt.toLocaleTimeString('id-ID')}`
-                      : ''
-                  }`
-                : syncStatus.status === 'error'
-                ? `Penyimpanan terkendala: ${syncStatus.message}. Klik untuk melihat status.`
+                ? 'Auto Sync sedang aktif: menyimpan perubahan data ke Supabase...'
+                : syncStatus.lastSavedAt
+                ? `Auto Sync Aktif: Data otomatis tersimpan ke Supabase (Terakhir: ${syncStatus.lastSavedAt.toLocaleTimeString('id-ID')})`
+                : syncStatus.autoSyncEnabled
+                ? 'Auto Sync Aktif: Setiap tambah/ubah/hapus data otomatis tersimpan ke Supabase'
                 : 'Klik untuk konfigurasi kredensial Supabase & panduan SQL'
             }
           >
@@ -119,19 +115,25 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenSupabaseGuide, onOpenMobil
               <>
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
                 <Database className="w-3.5 h-3.5 text-amber-600 animate-spin" />
-                <span className="hidden sm:inline">Menyimpan...</span>
+                <span className="hidden sm:inline font-bold">Menyimpan ke Supabase...</span>
               </>
             ) : syncStatus.status === 'saved' ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 <Database className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="hidden sm:inline font-bold">Supabase: Tersimpan Otomatis</span>
+                <span className="hidden sm:inline font-bold">Auto Sync: Tersimpan</span>
               </>
             ) : syncStatus.status === 'error' ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-bounce" />
                 <Database className="w-3.5 h-3.5 text-rose-600" />
                 <span className="hidden sm:inline">Supabase Terkendala</span>
+              </>
+            ) : syncStatus.autoSyncEnabled ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <Database className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline font-semibold">Auto Sync: Aktif</span>
               </>
             ) : (
               <>

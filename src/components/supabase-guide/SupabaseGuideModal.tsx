@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Database, Copy, Check, ExternalLink, ShieldCheck, RefreshCw, KeyRound, CheckCircle2, UploadCloud, AlertCircle } from 'lucide-react';
+import { Database, Copy, Check, ExternalLink, ShieldCheck, RefreshCw, KeyRound, CheckCircle2, UploadCloud, AlertCircle, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
 import { getStoredSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../../lib/supabase';
+import { isAutoSyncEnabled, setAutoSyncEnabled } from '../../lib/supabaseSync';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 
@@ -12,7 +13,7 @@ interface SupabaseGuideModalProps {
 }
 
 export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, onClose }) => {
-  const { users } = useAuth();
+  const { users, permissions } = useAuth();
   const { syncAllToSupabase } = useData();
 
   const [copied, setCopied] = useState(false);
@@ -20,6 +21,7 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; profileCount?: number } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string; details?: string } | null>(null);
+  const [autoSyncOn, setAutoSyncOn] = useState(() => isAutoSyncEnabled());
 
   const initialConfig = getStoredSupabaseConfig();
   const [supabaseUrl, setSupabaseUrl] = useState(initialConfig.url);
@@ -52,7 +54,7 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
     setSyncing(true);
     setSyncResult(null);
     try {
-      const res = await syncAllToSupabase(users);
+      const res = await syncAllToSupabase(users, permissions);
       setSyncResult({
         success: res.success,
         message: res.details,
@@ -142,6 +144,54 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
             {testResult.message}
           </div>
         )}
+
+        {/* Fitur Auto Sync (Otomatis Simpan Perubahan ke Supabase) */}
+        <div className="p-4 bg-gradient-to-r from-emerald-50/90 to-teal-50/90 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl shrink-0 mt-0.5">
+              <Zap className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-emerald-950">
+                  Fitur Auto Sync (Simpan Otomatis ke Supabase)
+                </h4>
+                <Badge variant={autoSyncOn ? 'green' : 'gray'}>
+                  {autoSyncOn ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'}
+                </Badge>
+              </div>
+              <p className="text-xs text-emerald-800/90 mt-1 leading-relaxed">
+                Setiap kali data <strong>ditambah, diubah, atau dihapus</strong> dari website (Siswa, Guru, Jadwal, Absensi, Izin, Pembayaran, Gaji, dan Akun), sistem akan <strong>langsung otomatis menyimpannya ke database Supabase</strong> secara real-time.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const nextState = !autoSyncOn;
+              setAutoSyncOn(nextState);
+              setAutoSyncEnabled(nextState);
+            }}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0 ${
+              autoSyncOn
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+            }`}
+          >
+            {autoSyncOn ? (
+              <>
+                <ToggleRight className="w-4 h-4 text-white" />
+                <span>Auto Sync: ON</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-4 h-4 text-slate-600" />
+                <span>Auto Sync: OFF</span>
+              </>
+            )}
+          </button>
+        </div>
 
         {/* Tombol Sinkronisasi Seluruh Data Lokal ke Supabase */}
         {isConfigured && (

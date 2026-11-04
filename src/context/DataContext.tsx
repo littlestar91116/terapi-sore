@@ -52,6 +52,10 @@ import {
   fetchTeacherLeavesFromSupabase,
   syncSaldoHistoryToSupabase,
   fetchSaldoHistoryFromSupabase,
+  syncFinancialSettingsToSupabase,
+  fetchFinancialSettingsFromSupabase,
+  syncPayrollToSupabase,
+  fetchPayrollsFromSupabase,
   pushAllLocalDataToSupabase,
   subscribeSyncStatus,
   getSyncStatus,
@@ -148,7 +152,7 @@ interface DataContextType {
 
   // Supabase Sync Action & Real-time Status
   syncStatus: SyncStatusInfo;
-  syncAllToSupabase: (usersList: any[]) => Promise<{
+  syncAllToSupabase: (usersList: any[], permissionsList?: any[]) => Promise<{
     success: boolean;
     totalSynced: number;
     details: string;
@@ -277,6 +281,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           remoteStudentLeaves,
           remoteTeacherLeaves,
           remoteSaldoHistory,
+          remoteFinancialSettings,
+          remotePayrolls,
         ] = await Promise.all([
           fetchStudentsFromSupabase(),
           fetchTeachersFromSupabase(),
@@ -287,6 +293,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fetchStudentLeavesFromSupabase(),
           fetchTeacherLeavesFromSupabase(),
           fetchSaldoHistoryFromSupabase(),
+          fetchFinancialSettingsFromSupabase(),
+          fetchPayrollsFromSupabase(),
         ]);
 
         if (remoteStudents && remoteStudents.length > 0) {
@@ -389,6 +397,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSaldoHistory((prev) => {
             const merged = [...prev];
             for (const r of remoteSaldoHistory) {
+              const idx = merged.findIndex((m) => m.id === r.id);
+              if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
+              else merged.push(r);
+            }
+            return merged;
+          });
+        }
+
+        if (remoteFinancialSettings) {
+          setFinancialSettings(remoteFinancialSettings);
+        }
+
+        if (remotePayrolls && remotePayrolls.length > 0) {
+          setPayrolls((prev) => {
+            const merged = [...prev];
+            for (const r of remotePayrolls) {
               const idx = merged.findIndex((m) => m.id === r.id);
               if (idx >= 0) merged[idx] = { ...merged[idx], ...r };
               else merged.push(r);
@@ -890,6 +914,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Financial Settings & Payroll Calculation
   const updateFinancialSettings = (settings: FinancialSettings) => {
     setFinancialSettings(settings);
+    syncFinancialSettingsToSupabase(settings);
   };
 
   const calculatePayrollForMonth = (monthYear: string) => {
@@ -947,19 +972,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const otherMonths = prev.filter((p) => p.monthYear !== monthYear);
       return [...otherMonths, ...calculatedPayrolls];
     });
+
+    // Otomatis kirim seluruh slip gaji bulan ini ke Supabase
+    calculatedPayrolls.forEach((p) => syncPayrollToSupabase(p));
   };
 
   const markPayrollPaid = (payrollId: string) => {
     setPayrolls((prev) =>
-      prev.map((p) =>
-        p.id === payrollId
-          ? { ...p, status: 'dibayar', paymentDate: new Date().toISOString().split('T')[0] }
-          : p
-      )
+      prev.map((p) => {
+        if (p.id === payrollId) {
+          const updated: Payroll = {
+            ...p,
+            status: 'dibayar',
+            paymentDate: new Date().toISOString().split('T')[0],
+          };
+          syncPayrollToSupabase(updated);
+          return updated;
+        }
+        return p;
+      })
     );
   };
 
-  const syncAllToSupabase = async (usersList: any[]) => {
+  const syncAllToSupabase = async (usersList: any[], permissionsList?: any[]) => {
     return pushAllLocalDataToSupabase({
       users: usersList,
       packages,
@@ -971,6 +1006,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       studentLeaves,
       teacherLeaves,
       saldoHistory,
+      permissions: permissionsList,
+      financialSettings,
+      payrolls,
     });
   };
 

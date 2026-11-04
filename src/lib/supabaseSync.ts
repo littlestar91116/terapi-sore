@@ -10,11 +10,30 @@ import {
   StudentLeave,
   TeacherLeave,
   SaldoJamHistory,
+  RolePermission,
+  FinancialSettings,
+  Payroll,
 } from '../types';
 
 // ==============================================================================
-// STATUS NOTIFIER UNTUK SINKRONISASI OTOMATIS
+// STATUS NOTIFIER & PENGATURAN AUTO SYNC OTOMATIS
 // ==============================================================================
+
+const LOCAL_STORAGE_AUTO_SYNC = 'terapi_auto_sync_enabled';
+
+export function isAutoSyncEnabled(): boolean {
+  const val = localStorage.getItem(LOCAL_STORAGE_AUTO_SYNC);
+  if (val === null) return true; // Default AKTIF otomatis
+  return val === 'true';
+}
+
+export function setAutoSyncEnabled(enabled: boolean): void {
+  localStorage.setItem(LOCAL_STORAGE_AUTO_SYNC, String(enabled));
+  setSyncStatus(
+    enabled ? 'saved' : 'idle',
+    enabled ? 'Auto Sync Aktif (Perubahan otomatis disimpan ke Supabase)' : 'Auto Sync Dinonaktifkan'
+  );
+}
 
 export type SyncState = 'idle' | 'syncing' | 'saved' | 'error' | 'unconfigured';
 
@@ -23,26 +42,33 @@ export interface SyncStatusInfo {
   lastSavedAt: Date | null;
   message: string;
   error?: string | null;
+  autoSyncEnabled: boolean;
 }
 
 let currentSyncStatus: SyncStatusInfo = {
   status: 'idle',
   lastSavedAt: null,
   message: 'Siap',
+  autoSyncEnabled: true,
 };
 
 const syncListeners = new Set<(info: SyncStatusInfo) => void>();
 
 export function getSyncStatus(): SyncStatusInfo {
   const supabase = getSupabase();
+  const autoEnabled = isAutoSyncEnabled();
   if (!supabase && currentSyncStatus.status === 'idle') {
     return {
       status: 'unconfigured',
       lastSavedAt: null,
       message: 'Supabase belum terhubung (Klik untuk konfigurasi)',
+      autoSyncEnabled: autoEnabled,
     };
   }
-  return currentSyncStatus;
+  return {
+    ...currentSyncStatus,
+    autoSyncEnabled: autoEnabled,
+  };
 }
 
 export function setSyncStatus(
@@ -55,6 +81,7 @@ export function setSyncStatus(
     lastSavedAt: status === 'saved' ? new Date() : currentSyncStatus.lastSavedAt,
     message,
     error: error ?? null,
+    autoSyncEnabled: isAutoSyncEnabled(),
   };
   syncListeners.forEach((listener) => {
     try {
@@ -272,10 +299,11 @@ export async function fetchProfilesFromSupabase(): Promise<(UserProfile & { pass
 export async function syncStudentToSupabase(student: Student): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabase();
   if (!supabase) return { success: false, error: 'Supabase belum terkonfigurasi' };
+  if (!isAutoSyncEnabled()) return { success: true };
 
   setSyncStatus('syncing', `Menyimpan data siswa ${student.name} ke Supabase...`);
   try {
-    const payload = {
+    const payload: any = {
       id: student.id,
       name: student.name,
       birth_date: student.birthDate || null,
@@ -290,7 +318,15 @@ export async function syncStudentToSupabase(student: Student): Promise<{ success
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('students').upsert(payload, { onConflict: 'id' });
+    let { error } = await supabase.from('students').upsert(payload, { onConflict: 'id' });
+
+    // Jika terjadi pelanggaran foreign key pada parent_user_id (misal profil belum selesai ditulis)
+    if (error && (error.code === '23503' || error.message.toLowerCase().includes('foreign key'))) {
+      payload.parent_user_id = null;
+      const retry = await supabase.from('students').upsert(payload, { onConflict: 'id' });
+      error = retry.error;
+    }
+
     if (error) {
       console.error('Supabase student upsert error:', error);
       setSyncStatus('error', `Gagal simpan siswa: ${error.message}`, error.message);
@@ -309,6 +345,7 @@ export async function syncStudentToSupabase(student: Student): Promise<{ success
 export async function deleteStudentFromSupabase(studentId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
+  if (!isAutoSyncEnabled()) return true;
   setSyncStatus('syncing', `Menghapus siswa dari Supabase...`);
   try {
     const { error } = await supabase.from('students').delete().eq('id', studentId);
@@ -356,10 +393,11 @@ export async function fetchStudentsFromSupabase(): Promise<Student[] | null> {
 export async function syncTeacherToSupabase(teacher: Teacher): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabase();
   if (!supabase) return { success: false, error: 'Supabase belum terkonfigurasi' };
+  if (!isAutoSyncEnabled()) return { success: true };
 
   setSyncStatus('syncing', `Menyimpan data guru ${teacher.name} ke Supabase...`);
   try {
-    const payload = {
+    const payload: any = {
       id: teacher.id,
       user_id: isValidUuid(teacher.userId) ? teacher.userId : null,
       name: teacher.name,
@@ -375,7 +413,15 @@ export async function syncTeacherToSupabase(teacher: Teacher): Promise<{ success
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('teachers').upsert(payload, { onConflict: 'id' });
+    let { error } = await supabase.from('teachers').upsert(payload, { onConflict: 'id' });
+
+    // Jika terjadi error foreign key pada user_id
+    if (error && (error.code === '23503' || error.message.toLowerCase().includes('foreign key'))) {
+      payload.user_id = null;
+      const retry = await supabase.from('teachers').upsert(payload, { onConflict: 'id' });
+      error = retry.error;
+    }
+
     if (error) {
       console.error('Supabase teacher upsert error:', error);
       setSyncStatus('error', `Gagal simpan guru: ${error.message}`, error.message);
@@ -394,6 +440,7 @@ export async function syncTeacherToSupabase(teacher: Teacher): Promise<{ success
 export async function deleteTeacherFromSupabase(teacherId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
+  if (!isAutoSyncEnabled()) return true;
   setSyncStatus('syncing', `Menghapus guru dari Supabase...`);
   try {
     const { error } = await supabase.from('teachers').delete().eq('id', teacherId);
@@ -828,7 +875,168 @@ export async function fetchSaldoHistoryFromSupabase(): Promise<SaldoJamHistory[]
 }
 
 // ==============================================================================
-// 9. SINKRONISASI MASSAL SEMUA DATA DARI FRONTEND KE SUPABASE
+// 9. SINKRONISASI HAK AKSES PERAN (ROLE PERMISSIONS)
+// ==============================================================================
+
+export async function syncRolePermissionsToSupabase(permissions: RolePermission[]): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  if (!isAutoSyncEnabled()) return true;
+
+  setSyncStatus('syncing', 'Menyimpan konfigurasi hak akses peran ke Supabase...');
+  try {
+    const payload = permissions.map((p) => ({
+      id: p.id || `perm-${p.role.slice(0, 3)}-${p.module}`,
+      role: p.role,
+      module: p.module,
+      can_view: p.canView,
+      can_add: p.canAdd,
+      can_edit: p.canEdit,
+      can_delete: p.canDelete,
+    }));
+
+    const { error } = await supabase.from('role_permissions').upsert(payload, { onConflict: 'role,module' });
+    if (!error) {
+      setSyncStatus('saved', 'Konfigurasi hak akses otomatis tersimpan ke Supabase');
+      return true;
+    }
+    console.warn('Gagal simpan hak akses:', error);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchRolePermissionsFromSupabase(): Promise<RolePermission[] | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from('role_permissions').select('*');
+    if (error || !data || data.length === 0) return null;
+    return data.map((d: any) => ({
+      id: d.id,
+      role: d.role,
+      module: d.module,
+      canView: Boolean(d.can_view),
+      canAdd: Boolean(d.can_add),
+      canEdit: Boolean(d.can_edit),
+      canDelete: Boolean(d.can_delete),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+// ==============================================================================
+// 10. SINKRONISASI PENGATURAN KEUANGAN
+// ==============================================================================
+
+export async function syncFinancialSettingsToSupabase(settings: FinancialSettings): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  if (!isAutoSyncEnabled()) return true;
+
+  setSyncStatus('syncing', 'Menyimpan pengaturan keuangan ke Supabase...');
+  try {
+    const payload = {
+      id: 1,
+      default_hourly_rate: settings.defaultHourlyRate,
+      full_attendance_bonus: settings.fullAttendanceBonus,
+      daily_leave_deduction: settings.dailyLeaveDeduction,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('financial_settings').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      setSyncStatus('saved', 'Pengaturan keuangan tersimpan ke Supabase');
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchFinancialSettingsFromSupabase(): Promise<FinancialSettings | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from('financial_settings').select('*').eq('id', 1).maybeSingle();
+    if (error || !data) return null;
+    return {
+      defaultHourlyRate: Number(data.default_hourly_rate),
+      fullAttendanceBonus: Number(data.full_attendance_bonus),
+      dailyLeaveDeduction: Number(data.daily_leave_deduction),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ==============================================================================
+// 11. SINKRONISASI GAJI GURU (PAYROLLS)
+// ==============================================================================
+
+export async function syncPayrollToSupabase(payroll: Payroll): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  if (!isAutoSyncEnabled()) return true;
+
+  setSyncStatus('syncing', `Menyimpan data gaji ${payroll.id} ke Supabase...`);
+  try {
+    const payload = {
+      id: payroll.id,
+      teacher_id: payroll.teacherId,
+      month_year: payroll.monthYear,
+      salary_system: payroll.salarySystem,
+      base_salary: payroll.baseSalary,
+      total_hours_taught: payroll.totalHoursTaught,
+      hourly_rate: payroll.hourlyRate,
+      bonus_full_attendance: payroll.bonusFullAttendance,
+      deduction_leave: payroll.deductionLeave,
+      total_leave_days: payroll.totalLeaveDays,
+      total_amount: payroll.totalAmount,
+      status: payroll.status,
+      payment_date: payroll.paymentDate || null,
+    };
+    const { error } = await supabase.from('payrolls').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      setSyncStatus('saved', `Data gaji ${payroll.id} tersimpan ke Supabase`);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchPayrollsFromSupabase(): Promise<Payroll[] | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.from('payrolls').select('*');
+    if (error || !data || data.length === 0) return null;
+    return data.map((d: any) => ({
+      id: d.id,
+      teacherId: d.teacher_id,
+      monthYear: d.month_year,
+      salarySystem: d.salary_system,
+      baseSalary: Number(d.base_salary),
+      totalHoursTaught: Number(d.total_hours_taught),
+      hourlyRate: Number(d.hourly_rate),
+      bonusFullAttendance: Number(d.bonus_full_attendance),
+      deductionLeave: Number(d.deduction_leave),
+      totalLeaveDays: Number(d.total_leave_days),
+      totalAmount: Number(d.total_amount),
+      status: d.status,
+      paymentDate: d.payment_date,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+// ==============================================================================
+// 12. SINKRONISASI MASSAL SEMUA DATA DARI FRONTEND KE SUPABASE
 // ==============================================================================
 
 export async function pushAllLocalDataToSupabase(data: {
@@ -842,6 +1050,9 @@ export async function pushAllLocalDataToSupabase(data: {
   studentLeaves?: StudentLeave[];
   teacherLeaves?: TeacherLeave[];
   saldoHistory?: SaldoJamHistory[];
+  permissions?: RolePermission[];
+  financialSettings?: FinancialSettings;
+  payrolls?: Payroll[];
 }): Promise<{
   success: boolean;
   totalSynced: number;
@@ -931,6 +1142,26 @@ export async function pushAllLocalDataToSupabase(data: {
   if (data.saldoHistory) {
     for (const history of data.saldoHistory) {
       const ok = await syncSaldoHistoryToSupabase(history);
+      if (ok) count++;
+    }
+  }
+
+  // 10. Sync Role Permissions
+  if (data.permissions && data.permissions.length > 0) {
+    const ok = await syncRolePermissionsToSupabase(data.permissions);
+    if (ok) count += data.permissions.length;
+  }
+
+  // 11. Sync Financial Settings
+  if (data.financialSettings) {
+    const ok = await syncFinancialSettingsToSupabase(data.financialSettings);
+    if (ok) count++;
+  }
+
+  // 12. Sync Payrolls
+  if (data.payrolls) {
+    for (const p of data.payrolls) {
+      const ok = await syncPayrollToSupabase(p);
       if (ok) count++;
     }
   }
