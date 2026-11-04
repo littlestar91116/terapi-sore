@@ -1,20 +1,33 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Ambil URL dan Anon Key dari environment variable Vite atau localStorage config jika ada
-const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Konfigurasi Project Supabase Little Star Learning Center
+export const DEFAULT_SUPABASE_URL = 'https://vidrunwbsafcsyksnidk.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_7ZlGcyHakiLu94Q-XWfWZQ_Xq29n6Fk';
+
+// Ambil URL dan Anon Key dari environment variable Vite atau default project
+const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 // Penyimpanan key lokal jika user memasukkan via form konfigurasi UI
 const LOCAL_STORAGE_KEY_URL = 'terapi_supabase_url';
 const LOCAL_STORAGE_KEY_ANON = 'terapi_supabase_anon';
 
 export function getStoredSupabaseConfig() {
-  const url = localStorage.getItem(LOCAL_STORAGE_KEY_URL) || ENV_SUPABASE_URL;
-  const key = localStorage.getItem(LOCAL_STORAGE_KEY_ANON) || ENV_SUPABASE_ANON_KEY;
+  let url = localStorage.getItem(LOCAL_STORAGE_KEY_URL) || ENV_SUPABASE_URL;
+  let key = localStorage.getItem(LOCAL_STORAGE_KEY_ANON) || ENV_SUPABASE_ANON_KEY;
+
+  // Jika masih tersimpan placeholder lama di browser, alihkan ke kredensial proyek aktif
+  if (!url || url === 'https://your-project.supabase.co') {
+    url = DEFAULT_SUPABASE_URL;
+  }
+  if (!key || key === 'your-anon-key-here') {
+    key = DEFAULT_SUPABASE_ANON_KEY;
+  }
+
   return {
     url: url.trim(),
     key: key.trim(),
-    isEnvProvided: Boolean(ENV_SUPABASE_URL && ENV_SUPABASE_ANON_KEY),
+    isEnvProvided: true,
   };
 }
 
@@ -76,6 +89,14 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
       .select('id', { count: 'exact', head: true });
 
     if (profileErr) {
+      const currentUrl = getStoredSupabaseConfig().url;
+      if (profileErr.message?.toLowerCase().includes('schema cache') || profileErr.message?.toLowerCase().includes('does not exist')) {
+        return {
+          success: true,
+          message: `Koneksi ke project Supabase (${currentUrl}) BERHASIL terhubung! Database masih baru dan tabel belum dibuat. Silakan klik tombol 'Salin Schema SQL' di bawah dan jalankan pada SQL Editor di Dashboard Supabase Anda.`,
+          profileCount: 0,
+        };
+      }
       return {
         success: false,
         message: `Terhubung ke Supabase namun query tabel profiles gagal: ${profileErr.message}. Pastikan schema.sql versi terbaru sudah dijalankan di SQL Editor.`,
