@@ -219,21 +219,44 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({ isOpen, 
 
         {syncResult && (
           <div
-            className={`p-3.5 rounded-xl text-xs font-medium border flex items-start gap-2 ${
+            className={`p-4 rounded-xl text-xs font-medium border flex flex-col gap-2.5 ${
               syncResult.success
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : 'bg-rose-50 text-rose-800 border-rose-200'
             }`}
           >
-            {syncResult.success ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            )}
-            <div>
-              <p className="font-semibold">{syncResult.message}</p>
-              {syncResult.details && <p className="text-2xs opacity-80 mt-1">{syncResult.details}</p>}
+            <div className="flex items-start gap-2">
+              {syncResult.success ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="font-bold text-sm">{syncResult.message}</p>
+                {syncResult.details && <p className="text-xs opacity-90 mt-1">{syncResult.details}</p>}
+              </div>
             </div>
+
+            {!syncResult.success && (
+              <div className="pt-2 border-t border-rose-200/80 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Schema SQL Tersalin!' : 'Salin Seluruh Schema SQL'}
+                </button>
+                <a
+                  href={`https://supabase.com/dashboard/project/${supabaseUrl.replace('https://', '').split('.')[0]}/sql/new`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-rose-300 hover:bg-rose-50 text-rose-900 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                >
+                  Buka SQL Editor Supabase <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            )}
           </div>
         )}
 

@@ -202,6 +202,14 @@ export async function syncProfileToSupabase(
       }
     }
 
+    if (error) {
+      const msg = error.code === 'PGRST205' || error.message.toLowerCase().includes('schema cache')
+        ? "Tabel 'profiles' belum dibuat di Supabase. Silakan jalankan schema.sql di SQL Editor."
+        : error.message;
+      setSyncStatus('error', `Gagal simpan akun: ${msg}`, msg);
+      return { success: false, error: msg };
+    }
+
     setSyncStatus('saved', `Akun @${cleanUsername} otomatis tersimpan ke Supabase`);
     return { success: true, data };
   } catch (err: any) {
@@ -485,9 +493,9 @@ export async function fetchTeachersFromSupabase(): Promise<Teacher[] | null> {
 // 4. SINKRONISASI PAKET TERAPI (PACKAGES)
 // ==============================================================================
 
-export async function syncPackageToSupabase(pkg: Package): Promise<boolean> {
+export async function syncPackageToSupabase(pkg: Package): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabase();
-  if (!supabase) return false;
+  if (!supabase) return { success: false, error: 'Supabase belum terkonfigurasi' };
 
   setSyncStatus('syncing', `Menyimpan paket ${pkg.name}...`);
   try {
@@ -505,13 +513,17 @@ export async function syncPackageToSupabase(pkg: Package): Promise<boolean> {
     );
     if (!error) {
       setSyncStatus('saved', `Paket ${pkg.name} tersimpan ke Supabase`);
-      return true;
+      return { success: true };
     }
-    setSyncStatus('error', `Gagal simpan paket: ${error.message}`);
-    return false;
-  } catch {
-    setSyncStatus('error', 'Gagal simpan paket');
-    return false;
+    const msg = error.code === 'PGRST205' || error.message.toLowerCase().includes('schema cache')
+      ? "Tabel 'packages' belum dibuat di Supabase. Harap jalankan script schema.sql di SQL Editor."
+      : error.message;
+    setSyncStatus('error', `Gagal simpan paket: ${msg}`, msg);
+    return { success: false, error: msg };
+  } catch (err: any) {
+    const msg = err?.message || 'Gagal simpan paket';
+    setSyncStatus('error', msg, msg);
+    return { success: false, error: msg };
   }
 }
 
@@ -1072,6 +1084,27 @@ export async function pushAllLocalDataToSupabase(data: {
 
   setSyncStatus('syncing', 'Menyinkronkan seluruh data ke Supabase...');
 
+  // Pre-flight check: Verifikasi apakah tabel-tabel utama sudah dibuat di database Supabase
+  try {
+    const { error: testErr } = await supabase.from('packages').select('id').limit(1);
+    if (
+      testErr &&
+      (testErr.code === 'PGRST205' ||
+        testErr.message?.toLowerCase().includes('schema cache') ||
+        testErr.message?.toLowerCase().includes('does not exist'))
+    ) {
+      const msg =
+        "Tabel database di Supabase belum dibuat. Silakan salin dan jalankan script 'schema.sql' di menu SQL Editor Supabase terlebih dahulu.";
+      setSyncStatus('error', msg, msg);
+      return {
+        success: false,
+        totalSynced: 0,
+        details: msg,
+        errors: ["Tabel 'packages' dan tabel lainnya belum dibuat di Supabase."],
+      };
+    }
+  } catch {}
+
   const errors: string[] = [];
   let count = 0;
 
@@ -1087,9 +1120,12 @@ export async function pushAllLocalDataToSupabase(data: {
 
   // 2. Sync Packages
   for (const pkg of data.packages) {
-    const ok = await syncPackageToSupabase(pkg);
-    if (ok) count++;
-    else errors.push(`Paket ${pkg.id}`);
+    const res = await syncPackageToSupabase(pkg);
+    if (res.success) {
+      count++;
+    } else {
+      errors.push(`Paket ${pkg.name}: ${res.error || 'Gagal'}`);
+    }
   }
 
   // 3. Sync Teachers
